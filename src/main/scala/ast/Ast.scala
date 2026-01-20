@@ -288,3 +288,24 @@ case class TypeParameterDecl(name: String, variance: Variance) extends AstNode {
 case class MethodDecl(name: String, returnType: TypeRef, parameters: List[FieldDecl], block: BlockStmt, modifiers: List[ModifierNode] = List.empty, typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
   override def prettyPrint: String = s"${modifiers.prettyPrint} ${returnType.prettyPrint} $name${parameters.map(_.prettyPrint).mkString("(", ", ", ")")}"
 }
+
+case class ClassDecl(name: String,
+                     modifiers: List[ModifierNode] = List.empty,
+                     superClasses: List[TypeRef] = List.empty,
+                     fields: List[FieldDecl] = List.empty,
+                     methods: List[MethodDecl] = List.empty,
+                     nestedClasses: List[ClassDecl] = List.empty,
+                     typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
+  override def prettyPrint: String = s"${modifiers.prettyPrint} class${typeParameters.prettyPrint} $name${
+    if superClasses.isEmpty then ""
+    else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
+  } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n}"
+}
+
+case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
+                     classDecls: List[ClassDecl] = List.empty,
+                     functionDecls: List[MethodDecl] = List.empty,
+                     variableDecls: List[FieldDecl] = List.empty) extends AstNode {
+  override def prettyPrint: String
+  = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
+}
