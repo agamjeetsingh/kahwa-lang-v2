@@ -153,13 +153,19 @@ object Parsel {
     })
   }
 
-  def optional[A, Token, Error](parsel: Parsel[A, Token, Error])(using spFunc: SafePointFunction[Token]): Parsel[Option[A], Token, Error] = {
-    parsel.map(a => Some(a))
+  def optional[A, Token, Error](parsel: Parsel[A, Token, Error]): Parsel[Option[A], Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      val (res, next, errs) = parsel.parserFunc(input)
+      res match {
+        case Some(a) => (Some(Some(a)), next, errs)
+        case None => (Some(None), input, Iterable.empty)
+      }
+    })
   }
 
   def sepBy[A, Token, Error, B](element: Parsel[A, Token, Error], separator: Parsel[B, Token, Error]): Parsel[List[A], Token, Error] = {
     Parsel((input: Parsel.Input[Token]) => {
-      val (firstRes, firstNext, firstErrs) = element.parserFunc(input)
+      val (firstRes, firstNext, firstErrs) = element(input)
 
       firstRes match {
         case None =>
