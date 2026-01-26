@@ -10,6 +10,32 @@ class Parsel[+A, Token, Error](val parserFunc: ParserFunction[A, Token, Error]) 
     val (res: Option[A], next: Parsel.Input[Token], errors: Iterable[Error]) = parserFunc(input)
     (res.map(f), next, errors))
 
+  def map[B](f: (A, Parsel.Input[Token]) => B)(using spFunc: SafePointFunction[Token]): Parsel[B, Token, Error] = Parsel((input: Parsel.Input[Token]) =>
+    val (res: Option[A], next: Parsel.Input[Token], errors: Iterable[Error]) = parserFunc(input)
+    (res match {
+      case Some(value: A) => Some(f(value, input)) // TODO - Not 100% on whether it should be input or next
+      case None => None
+    }, next, errors)
+  )
+
+  def flatMap[B](f: A => Option[B])(using spFunc: SafePointFunction[Token]): Parsel[B, Token, Error] =
+    Parsel((input: Parsel.Input[Token]) => {
+      val (res, next, errors) = parserFunc(input)
+      res match {
+        case Some(a) => (f(a), next, errors)
+        case None => (None, next, errors)
+      }
+    })
+
+  def flatMap[B](f: (A, Parsel.Input[Token]) => Option[B])(using spFunc: SafePointFunction[Token]): Parsel[B, Token, Error] =
+    Parsel((input: Parsel.Input[Token]) => {
+      val (res, next, errors) = parserFunc(input)
+      res match {
+        case Some(a) => (f(a, input), next, errors) // TODO - Not 100% on whether it should be input or next
+        case None => (None, next, errors)
+      }
+    })
+
   def ~[B](that: Parsel[B, Token, Error]): Parsel[(A, B), Token, Error] =
     Parsel((input: Parsel.Input[Token]) =>
       val (r1, i1, e1) = parserFunc(input)
