@@ -79,4 +79,26 @@ object Parsel {
       }
     })
   }
+
+  def list[A, Token, Error](parsel: Parsel[A, Token, Error]): Parsel[List[A], Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      @scala.annotation.tailrec
+      def loop(currentInput: Parsel.Input[Token],
+               lastGoodInput: Parsel.Input[Token],
+               acc: List[A],
+               accErrors: Iterable[Error]): (Option[List[A]], Parsel.Input[Token], Iterable[Error]) = {
+        val (res, nextInput, errs) = parsel.parserFunc(currentInput)
+        res match {
+          case Some(a) =>
+            // Successful parse - accumulate result and errors, continue from next input
+            loop(nextInput, nextInput, a :: acc, accErrors ++ errs)
+          case None =>
+            // Failed parse - backtrack to last good input, discard the failure errors
+            (Some(acc.reverse), lastGoodInput, accErrors)
+        }
+      }
+
+      loop(input, input, List.empty, Iterable.empty)
+    })
+  }
 }
