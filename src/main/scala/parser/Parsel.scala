@@ -101,4 +101,46 @@ object Parsel {
       loop(input, input, List.empty, Iterable.empty)
     })
   }
+
+  def optional[A, Token, Error](parsel: Parsel[A, Token, Error])(using spFunc: SafePointFunction[Token]): Parsel[Option[A], Token, Error] = {
+    parsel.map(a => Some(a))
+  }
+
+  def sepBy[A, Token, Error, B](element: Parsel[A, Token, Error], separator: Parsel[B, Token, Error]): Parsel[List[A], Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      val (firstRes, firstNext, firstErrs) = element.parserFunc(input)
+
+      firstRes match {
+        case None =>
+          // No first element - return empty list, backtrack, no errors
+          (Some(List.empty), input, Iterable.empty)
+        case Some(first) =>
+          // Got first element, now loop for separator + element pairs
+          @scala.annotation.tailrec
+          def loop(currentInput: Parsel.Input[Token],
+                   acc: List[A],
+                   accErrors: Iterable[Error]): (Option[List[A]], Parsel.Input[Token], Iterable[Error]) = {
+            val (sepRes, sepNext, sepErrs) = separator.parserFunc(currentInput)
+            sepRes match {
+              case None =>
+                // No separator - we're done
+                (Some(acc.reverse), currentInput, accErrors)
+              case Some(_) =>
+                // Got separator, now MUST parse element
+                val (elemRes, elemNext, elemErrs) = element.parserFunc(sepNext)
+                elemRes match {
+                  case Some(a) =>
+                    // Got element, continue
+                    loop(elemNext, a :: acc, accErrors ++ sepErrs ++ elemErrs)
+                  case None =>
+                    // Failed to parse element after separator - keep errors and stop
+                    (Some(acc.reverse), elemNext, accErrors ++ sepErrs ++ elemErrs)
+                }
+            }
+          }
+
+          loop(firstNext, List(first), firstErrs)
+      }
+    })
+  }
 }
