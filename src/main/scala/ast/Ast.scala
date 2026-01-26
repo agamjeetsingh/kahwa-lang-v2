@@ -4,7 +4,7 @@ import scala.annotation.targetName
 
 sealed trait AstNode extends PrettyPrintable
 
-sealed trait PrettyPrintable {
+trait PrettyPrintable {
   def prettyPrint: String
 }
 
