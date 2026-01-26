@@ -106,6 +106,31 @@ object Parsel {
     })
   }
 
+  def or[A, Token, Error](parsers: Parsel[A, Token, Error]*): Parsel[A, Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      @scala.annotation.tailrec
+      def tryParsers(remaining: Seq[Parsel[A, Token, Error]], lastErrors: Iterable[Error]): (Option[A], Parsel.Input[Token], Iterable[Error]) = {
+        remaining.headOption match {
+          case None =>
+            // All parsers failed
+            (None, input, lastErrors)
+          case Some(parser) =>
+            val (res, next, errs) = parser.parserFunc(input)
+            res match {
+              case Some(a) =>
+                // Success - return result
+                (Some(a), next, errs)
+              case None =>
+                // Failed - try next parser
+                tryParsers(remaining.tail, errs)
+            }
+        }
+      }
+
+      tryParsers(parsers, Iterable.empty)
+    })
+  }
+
   def list[A, Token, Error](parsel: Parsel[A, Token, Error]): Parsel[List[A], Token, Error] = {
     Parsel((input: Parsel.Input[Token]) => {
       @scala.annotation.tailrec
