@@ -200,4 +200,8 @@ object Parsel {
       }
     })
   }
+
+  def delay[A, Token, Error](parser: => Parsel[A, Token, Error]): Parsel[A, Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => parser.parserFunc(input))
+  }
 }
