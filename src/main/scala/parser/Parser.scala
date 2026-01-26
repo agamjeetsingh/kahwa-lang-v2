@@ -5,10 +5,47 @@ import diagnostics.Diagnostic
 import diagnostics.Diagnostic.*
 import sources.SourceRange
 
-class Parser {
+import scala.language.postfixOps
+import Parsel.*
+import parser.Token.{Greater, Identifier, Less}
+
+object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
   type SafePointFunc = SafePointFunction[Token]
+
+  private def sync(input: Parsel.Input[Token])(using spFunc: SafePointFunc): Parsel.Input[Token] = {
+    var i = input
+    while (i.current match {
+      case Some(token) => spFunc(token)
+      case None => false
+    }) {
+      i = i.advance
+    }
+    i
+  }
+
+  private def parseToken[A](tokenMatch: Token => Option[A], notMatchError: Token => Diagnostic, endOfFileError: SourceRange => Diagnostic): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
+    input.current match {
+      case Some(token) => {
+        val matched = tokenMatch(token)
+        matched match {
+          case Some(value: A) => (matched, input.advance, Iterable.empty)
+          case None => (None, input.advance, List(notMatchError(token)))
+        }
+      }
+      case None => (None, input.advance, List(endOfFileError(input.last match {
+        case Some(token) => token.range
+        case None => SourceRange(-1, 0, 0)
+      })))
+    })
   
+  private def parseTok[A](expected: String)(check: PartialFunction[Token, A]): Parsel[A, Token, Diagnostic] =
+    parseToken(
+      check.lift,
+      token => ExpectedSomething(expected, token.prettyPrint, token.range),
+      range => ExpectedSomething(expected, "EOF", range)
+    )
+
   val parseModifierNode: Parsel[ModifierNode, Token, Diagnostic] = parseToken(token =>
     if (token.isModifier) {
       Some(ModifierNode(token match {
@@ -24,28 +61,36 @@ class Parser {
     } else {
       None
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
-  
-  def parseToken[A](tokenMatch: Token => Option[A], notMatchError: Token => Diagnostic, endOfFileError: SourceRange => Diagnostic): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
-    input.current match {
-      case Some(token) => {
-        val matched = tokenMatch(token)
-        matched match {
-          case Some(value: A) => (matched, input.advance, Iterable.empty)
-          case None => (None, input.advance, List(notMatchError(token)))
-        }
+
+  def parseTypeRef(using spFunc: SafePointFunc): Parsel[TypeRef, Token, Diagnostic] = {
+    (parseIdentifier ~ optional(parseLess ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseGreater)).flatMap { (res: (Identifier, Option[List[(Variance, TypeRef)]]),
+                                                                                                                             input: Parsel.Input[Token]) =>
+      val (ident, optionalArgs) = res
+
+      optionalArgs match {
+        case Some(args) =>
+          Some(TypeRef(ident.value, args.map(_.swap)))
+
+        case None =>
+          sync(input)
+          None
       }
-      case None => (None, input.advance, List(endOfFileError(input.last match {
-        case Some(token) => token.range
-        case None => SourceRange(-1, 0, 0)
-      })))
-    })
-  
-  def parseTok[A](expected: String)(check: PartialFunction[Token, A]): Parsel[A, Token, Diagnostic] =
-    parseToken(
-      check.lift,
-      token => ExpectedSomething(expected, token.prettyPrint, token.range),
-      range => ExpectedSomething(expected, "EOF", range)
-    )
+    }
+  }
+
+  def parseTypedefDecl(using spFunc: SafePointFunc): Parsel[TypedefDecl, Token, Diagnostic] = {
+    (list(parseModifierNode) ~ (parseTypedef ~> parseIdentifier <~ parseEquals) ~ parseTypeRef).map { case ((modifierNodes, identifier), typeRef) =>
+      TypedefDecl(identifier.value, typeRef, modifierNodes)
+    }
+  }
+
+  def parseVariance(using spFunc: SafePointFunc): Parsel[Variance, Token, Diagnostic] = {
+    optional(or(parseOut, parseIn)).map {
+      case None => Variance.INVARIANT
+      case Some(_: Token.Out) => Variance.COVARIANT
+      case Some(_: Token.In) => Variance.CONTRAVARIANT
+    }
+  }
 
   // Pre-defined token parsers
   private val parseColon = parseTok(":") { case tok: Token.Colon => tok }
