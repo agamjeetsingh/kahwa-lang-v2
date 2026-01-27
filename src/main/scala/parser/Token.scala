@@ -150,9 +150,9 @@ enum Token extends PrettyPrintable {
 
   case CharLiteral(value: Char, range: SourceRange) extends Token
 
-  case Integer(value: Int, range: SourceRange) extends Token
+  case IntegerLiteral(value: Int, range: SourceRange) extends Token
 
-  case Float(value: Float, range: SourceRange) extends Token
+  case FloatLiteral(value: Float, range: SourceRange) extends Token
   
   def isModifier: Boolean = this match {
     case _: Token.Static | Token.Public | Token.Private | Token.Protected |
@@ -230,7 +230,7 @@ enum Token extends PrettyPrintable {
     case Token.Identifier(value, _) => value
     case Token.StringLiteral(value, _) => s""""$value""""
     case Token.CharLiteral(value, _) => value.toString
-    case Token.Integer(value, _) => value.toString
-    case Token.Float(value, _) => value.toString
+    case Token.IntegerLiteral(value, _) => value.toString
+    case Token.FloatLiteral(value, _) => value.toString
   }
 }
