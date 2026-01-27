@@ -204,4 +204,128 @@ object Parsel {
   def delay[A, Token, Error](parser: => Parsel[A, Token, Error]): Parsel[A, Token, Error] = {
     Parsel((input: Parsel.Input[Token]) => parser.parserFunc(input))
   }
+
+  sealed trait Fixity
+  object Prefix extends Fixity
+  object Postfix extends Fixity
+  object InfixL extends Fixity
+  object InfixR extends Fixity
+  object InfixN extends Fixity
+
+  sealed trait OpLevel[Expr, Token, Error] {
+    def fixity: Fixity
+    def ops: Seq[Parsel[Any, Token, Error]]
+  }
+
+  class Ops[Expr, Token, Error](val fixity: Fixity, val ops: Parsel[Any, Token, Error]*) extends OpLevel[Expr, Token, Error]
+
+  object Ops {
+    def apply[Expr, Token, Error](fixity: Fixity)(ops: Parsel[Any, Token, Error]*): Ops[Expr, Token, Error] =
+      new Ops(fixity, ops*)
+  }
+
+  def precedence[Expr, Token, Error](
+    atoms: Parsel[Expr, Token, Error]*
+  )(
+    levels: OpLevel[Expr, Token, Error]*
+  ): Parsel[Expr, Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      val atomParser = or(atoms*)
+
+      def parsePrefix(input: Parsel.Input[Token], prefixOps: List[Parsel[Any, Token, Error]]): (Option[Expr], Parsel.Input[Token], Iterable[Error]) = {
+        prefixOps match {
+          case Nil =>
+            atomParser.parserFunc(input)
+          case ops =>
+            val prefixParser = or(ops.map(_.asInstanceOf[Parsel[Expr => Expr, Token, Error]])*)
+            val (opRes, opNext, opErrs) = prefixParser.parserFunc(input)
+
+            opRes match {
+              case Some(f) =>
+                val (exprRes, exprNext, exprErrs) = parseExprWithLevel(opNext, 0)
+                (exprRes.map(f), exprNext, opErrs ++ exprErrs)
+              case None =>
+                atomParser.parserFunc(input)
+            }
+        }
+      }
+
+      def parseExprWithLevel(input: Parsel.Input[Token], minLevel: Int): (Option[Expr], Parsel.Input[Token], Iterable[Error]) = {
+        val prefixOps = levels.zipWithIndex.collect {
+          case (level, index) if level.fixity == Prefix && index >= minLevel => level.ops.toList
+        }.flatten.toList
+
+        val (lhsOpt, lhsNext, lhsErrs) = parsePrefix(input, prefixOps)
+
+        lhsOpt match {
+          case None => (None, lhsNext, lhsErrs)
+          case Some(lhs) => parseOperators(lhs, lhsNext, lhsErrs, minLevel)
+        }
+      }
+
+      def parseOperators(lhs: Expr, input: Parsel.Input[Token], accErrs: Iterable[Error], minLevel: Int): (Option[Expr], Parsel.Input[Token], Iterable[Error]) = {
+        var currentLhs = lhs
+        var currentInput = input
+        var currentErrs = accErrs
+        var continue = true
+
+        while (continue) {
+          var matched = false
+
+          for ((level, levelIndex) <- levels.zipWithIndex if !matched && levelIndex >= minLevel) {
+            level.fixity match {
+              case Postfix =>
+                val postfixParser = or(level.ops.map(_.asInstanceOf[Parsel[Expr => Expr, Token, Error]])*)
+                val (opRes, opNext, opErrs) = postfixParser.parserFunc(currentInput)
+
+                opRes match {
+                  case Some(f) =>
+                    currentLhs = f(currentLhs)
+                    currentInput = opNext
+                    currentErrs = currentErrs ++ opErrs
+                    matched = true
+                  case None =>
+                }
+
+              case fixity @ (InfixL | InfixR | InfixN) =>
+                val infixParser = or(level.ops.map(_.asInstanceOf[Parsel[(Expr, Expr) => Expr, Token, Error]])*)
+                val (opRes, opNext, opErrs) = infixParser.parserFunc(currentInput)
+
+                opRes match {
+                  case Some(f) =>
+                    val nextMinLevel = fixity match {
+                      case InfixL => levelIndex + 1
+                      case InfixR => levelIndex
+                      case InfixN => levelIndex + 1
+                    }
+
+                    val (rhsOpt, rhsNext, rhsErrs) = parseExprWithLevel(opNext, nextMinLevel)
+
+                    rhsOpt match {
+                      case Some(rhs) =>
+                        currentLhs = f(currentLhs, rhs)
+                        currentInput = rhsNext
+                        currentErrs = currentErrs ++ opErrs ++ rhsErrs
+                        matched = true
+                      case None =>
+                        currentErrs = currentErrs ++ opErrs ++ rhsErrs
+                    }
+                  case None =>
+                }
+
+              case Prefix =>
+            }
+          }
+
+          if (!matched) {
+            continue = false
+          }
+        }
+
+        (Some(currentLhs), currentInput, currentErrs)
+      }
+
+      parseExprWithLevel(input, 0)
+    })
+  }
 }
