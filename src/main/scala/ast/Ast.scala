@@ -210,7 +210,7 @@ case class TypeRef(name: String, args: List[(TypeRef, Variance)] = List.empty) e
   override def prettyPrint: String = {
     val prettyArgs = if args.nonEmpty then args.map {
       (typeRef, variance) => s"${variance.prettyPrint}${typeRef.prettyPrint}"
-    }.mkString("<", ", ", ">")
+    }.mkString("[", ", ", "]")
     else ""
 
     s"$name$prettyArgs"
@@ -297,7 +297,7 @@ case class ClassDecl(name: String,
                      methods: List[FunctionDecl] = List.empty,
                      nestedClasses: List[ClassDecl] = List.empty,
                      typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint} class${typeParameters.prettyPrint} $name${
+  override def prettyPrint: String = s"${modifiers.prettyPrint}class${typeParameters.prettyPrint} $name${
     if superClasses.isEmpty then ""
     else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
   } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n}"
