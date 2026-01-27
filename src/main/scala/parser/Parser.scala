@@ -234,6 +234,33 @@ object Parser {
     })
   }
 
+  def parseClassDecl(using spFunc: SafePointFunc): Parsel[ClassDecl, Token, Diagnostic] = {
+    ((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
+      optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
+      (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl)) <~ parseRightCurlyBrace)).map(tuple => {
+      val (((modifierNodes, identifier), optionalSuperClasses), classMembers) = tuple
+      ClassDecl(
+        identifier.value,
+        modifierNodes,
+        optionalSuperClasses.getOrElse(Nil),
+        ???,
+        classMembers.collect { case decl: FunctionDecl => decl },
+        classMembers.collect { case decl: ClassDecl => decl },
+        ???)
+    })
+  }
+
+  def parseKahwaFile(using spFunc: SafePointFunc): Parsel[KahwaFile, Token, Diagnostic] = {
+    list(or(parseClassDecl, parseFunctionDecl, parseTypedef)).map(fileMembers => {
+      KahwaFile(
+        fileMembers.collect { case decl: TypedefDecl => decl },
+        fileMembers.collect { case decl: ClassDecl => decl },
+        fileMembers.collect { case decl: FunctionDecl => decl },
+        fileMembers.collect { case decl: VariableDecl => decl },
+      )
+    })
+  }
+
   // Pre-defined token parsers
   private val parseColon = parseTok(":") { case tok: Token.Colon => tok }
   private val parseSemiColon = parseTok(";") { case tok: Token.SemiColon => tok }
