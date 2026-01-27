@@ -25,13 +25,13 @@ object Parser {
     i
   }
 
-  val isSafePointForFile: SafePointFunc = token => token match {
+  val isSafePointForFile: SafePointFunc = {
     case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) => true
     case t if t.isModifier => true
     case _ => false
   }
 
-  val isSafePointForClass: SafePointFunc = token => token match {
+  val isSafePointForClass: SafePointFunc = {
     case Token.Identifier(_, _) => true
     case t if t.isModifier => true
     case _ => false
@@ -39,12 +39,12 @@ object Parser {
 
   val skipNothing: SafePointFunc = _ => true
 
-  val isSafePointForStmt: SafePointFunc = token => token match {
+  val isSafePointForStmt: SafePointFunc = {
     case Token.Static(_) | Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
     case _ => false
   }
 
-  val isSafePointForBlock: SafePointFunc = token => token match {
+  val isSafePointForBlock: SafePointFunc = {
     case Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
     case _ => false
   }
@@ -88,7 +88,7 @@ object Parser {
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
 
   def parseTypeRef(using spFunc: SafePointFunc): Parsel[TypeRef, Token, Diagnostic] = {
-    (parseIdentifier ~ optional(parseLess ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseGreater)).map {
+    (parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map {
       case (ident, optionalArgs) =>
         optionalArgs match {
           case Some(args) => TypeRef(ident.value, args.map(_.swap))
