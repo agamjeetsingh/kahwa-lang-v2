@@ -7,7 +7,7 @@ import sources.SourceRange
 
 import scala.language.postfixOps
 import parser.Parsel.*
-import parser.Token.Identifier
+import parser.Token.{Class, Identifier, LeftBracket, LeftCurlyBrace, Private, RightBracket, RightCurlyBrace}
 import parser.Parsel.list
 
 object Parser {
@@ -87,7 +87,7 @@ object Parser {
       None
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
 
-  def parseTypeRef(using spFunc: SafePointFunc): Parsel[TypeRef, Token, Diagnostic] = {
+  lazy val parseTypeRef: SafePointFunc ?=> Parsel[TypeRef, Token, Diagnostic] = {
     (parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map {
       case (ident, optionalArgs) =>
         optionalArgs match {
@@ -97,13 +97,13 @@ object Parser {
     }
   }
 
-  def parseTypedefDecl(using spFunc: SafePointFunc): Parsel[TypedefDecl, Token, Diagnostic] = {
+  lazy val parseTypedefDecl: SafePointFunc ?=> Parsel[TypedefDecl, Token, Diagnostic] = {
     (list(parseModifierNode) ~ (parseTypedef ~> parseIdentifier <~ parseEquals) ~ parseTypeRef).map { case ((modifierNodes, identifier), typeRef) =>
       TypedefDecl(identifier.value, typeRef, modifierNodes)
     }
   }
 
-  def parseVariance(using spFunc: SafePointFunc): Parsel[Variance, Token, Diagnostic] = {
+  lazy val parseVariance: SafePointFunc ?=> Parsel[Variance, Token, Diagnostic] = {
     optional(or(parseOut, parseIn)).map {
       case None => Variance.INVARIANT
       case Some(_: Token.Out) => Variance.COVARIANT
@@ -111,7 +111,7 @@ object Parser {
     }
   }
 
-  private def atomExpr(using spFunc: SafePointFunc): Parsel[Expr, Token, Diagnostic] = {
+  lazy val atomExpr: SafePointFunc ?=> Parsel[Expr, Token, Diagnostic] = {
     or(
       parseTrue.map(_ => BoolLiteral(true)),
       parseFalse.map(_ => BoolLiteral(false)),
@@ -123,7 +123,7 @@ object Parser {
     )
   }
 
-  def parseExpr(using spFunc: SafePointFunc): Parsel[Expr, Token, Diagnostic] = {
+  lazy val parseExpr: SafePointFunc ?=> Parsel[Expr, Token, Diagnostic] = {
     precedence[Expr, Token, Diagnostic](
       atomExpr,
       parseLeftParen ~> delay(parseExpr) <~ parseRightParen
@@ -198,12 +198,12 @@ object Parser {
     )
   }
 
-  def parseBlock(using spFunc: SafePointFunc): Parsel[BlockStmt, Token, Diagnostic] = {
+  lazy val parseBlock: SafePointFunc ?=> Parsel[BlockStmt, Token, Diagnostic] = {
     given SafePointFunc = isSafePointForBlock
     (parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace).map(BlockStmt(_))
   }
 
-  def parseStmt(using spFunc: SafePointFunc): Parsel[Stmt, Token, Diagnostic] = {
+  lazy val parseStmt: SafePointFunc ?=> Parsel[Stmt, Token, Diagnostic] = {
     or(
       (parseBreak <~ parseSemiColon).map(_ => BreakStmt()),
       (parseContinue <~ parseSemiColon).map(_ => ContinueStmt()),
@@ -221,36 +221,45 @@ object Parser {
     )
   }
 
-  def parseFunctionDecl(using spFunc: SafePointFunc): Parsel[FunctionDecl, Token, Diagnostic] = {
-    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (parseLeftParen ~> sepBy(
-      (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
-        val (((modifierNodes, varType), identifier), optionalExpr) = tuple
-        VariableDecl(identifier.value, varType, optionalExpr, modifierNodes)
-      }),
-      parseComma
-    ) <~ parseRightParen) ~ parseBlock).map(tuple => {
+  lazy val parseGenericArguments: SafePointFunc ?=> Parsel[List[TypeParameterDecl], Token, Diagnostic] = {
+    (parseLeftBracket ~> sepBy(parseVariance ~ parseIdentifier, parseComma) <~ parseRightBracket).map(genericArgs => {
+      genericArgs.map((variance, identifier) => TypeParameterDecl(identifier.value, variance))
+    })
+  }
+
+  lazy val parseFunctionDecl: SafePointFunc ?=> Parsel[FunctionDecl, Token, Diagnostic] = {
+    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
+      (parseLeftParen ~> sepBy(parseVariableDecl, parseComma) <~ parseRightParen) ~ parseBlock).map(tuple => {
       val ((((modifiers, returnType), identifier), parameters), body) = tuple
       FunctionDecl(identifier.value, returnType, parameters, body, modifiers, List.empty)
     })
   }
 
-  def parseClassDecl(using spFunc: SafePointFunc): Parsel[ClassDecl, Token, Diagnostic] = {
+  lazy val parseVariableDecl: SafePointFunc ?=> Parsel[VariableDecl, Token, Diagnostic] = {
+    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
+      val (((modifierNodes, varType), identifier), optionalExpr) = tuple
+      VariableDecl(identifier.value, varType, optionalExpr, modifierNodes)
+    })
+  }
+
+  lazy val parseClassDecl: SafePointFunc ?=> Parsel[ClassDecl, Token, Diagnostic] = {
     ((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
+      parseGenericArguments ~
       optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
       (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl)) <~ parseRightCurlyBrace)).map(tuple => {
-      val (((modifierNodes, identifier), optionalSuperClasses), classMembers) = tuple
+      val ((((modifierNodes, identifier), typeParameters), optionalSuperClasses), classMembers) = tuple
       ClassDecl(
         identifier.value,
         modifierNodes,
         optionalSuperClasses.getOrElse(Nil),
-        ???,
+        List.empty, // TODO
         classMembers.collect { case decl: FunctionDecl => decl },
         classMembers.collect { case decl: ClassDecl => decl },
-        ???)
+        typeParameters)
     })
   }
 
-  def parseKahwaFile(using spFunc: SafePointFunc): Parsel[KahwaFile, Token, Diagnostic] = {
+  lazy val parseKahwaFile: SafePointFunc ?=> Parsel[KahwaFile, Token, Diagnostic] = {
     list(or(parseClassDecl, parseFunctionDecl, parseTypedef)).map(fileMembers => {
       KahwaFile(
         fileMembers.collect { case decl: TypedefDecl => decl },
