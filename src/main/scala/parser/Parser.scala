@@ -6,8 +6,9 @@ import diagnostics.Diagnostic.*
 import sources.SourceRange
 
 import scala.language.postfixOps
-import Parsel.*
-import parser.Token.{Greater, Identifier, Less}
+import parser.Parsel.*
+import parser.Token.Identifier
+import parser.Parsel.list
 
 object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
@@ -63,18 +64,12 @@ object Parser {
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
 
   def parseTypeRef(using spFunc: SafePointFunc): Parsel[TypeRef, Token, Diagnostic] = {
-    (parseIdentifier ~ optional(parseLess ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseGreater)).flatMap { (res: (Identifier, Option[List[(Variance, TypeRef)]]),
-                                                                                                                             input: Parsel.Input[Token]) =>
-      val (ident, optionalArgs) = res
-
-      optionalArgs match {
-        case Some(args) =>
-          Some(TypeRef(ident.value, args.map(_.swap)))
-
-        case None =>
-          sync(input)
-          None
-      }
+    (parseIdentifier ~ optional(parseLess ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseGreater)).map {
+      case (ident, optionalArgs) =>
+        optionalArgs match {
+          case Some(args) => TypeRef(ident.value, args.map(_.swap))
+          case None => TypeRef(ident.value, List.empty)
+        }
     }
   }
 
@@ -90,6 +85,112 @@ object Parser {
       case Some(_: Token.Out) => Variance.COVARIANT
       case Some(_: Token.In) => Variance.CONTRAVARIANT
     }
+  }
+
+  private def atomExpr(using spFunc: SafePointFunc): Parsel[Expr, Token, Diagnostic] = {
+    or(
+      parseTrue.map(_ => BoolLiteral(true)),
+      parseFalse.map(_ => BoolLiteral(false)),
+      parseNull.map(_ => NullLiteral()),
+      parseFloat.map(tok => FloatLiteral(tok.value)),
+      parseInteger.map(tok => IntegerLiteral(tok.value)),
+      parseStringLiteral.map(tok => StringLiteral(tok.value)),
+      parseIdentifier.map(tok => Ident(tok.value))
+    )
+  }
+
+  def parseExpr(using spFunc: SafePointFunc): Parsel[Expr, Token, Diagnostic] = {
+    precedence[Expr, Token, Diagnostic](
+      atomExpr,
+      parseLeftParen ~> delay(parseExpr) <~ parseRightParen
+    )(
+      Ops(InfixR)(
+        parseEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.EQUALS)),
+        parsePlusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS_EQUALS)),
+        parseMinusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS_EQUALS)),
+        parseStarEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR_EQUALS)),
+        parseSlashEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH_EQUALS)),
+        parseModuloEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO_EQUALS)),
+        parseLeftShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT_EQUALS)),
+        parseRightShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT_EQUALS)),
+        parseBitwiseAndEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND_EQUALS)),
+        parseBitwiseOrEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR_EQUALS)),
+        parseBitwiseXorEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR_EQUALS))
+      ),
+      Ops(InfixL)(
+        parseLogicalOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_OR))
+      ),
+      Ops(InfixL)(
+        parseLogicalAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_AND))
+      ),
+      Ops(InfixL)(
+        parseBitwiseOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR))
+      ),
+      Ops(InfixL)(
+        parseBitwiseXor.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR))
+      ),
+      Ops(InfixL)(
+        parseBitwiseAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND))
+      ),
+      Ops(InfixL)(
+        parseDoubleEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.DOUBLE_EQUALS)),
+        parseNotEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.NOT_EQUALS))
+      ),
+      Ops(InfixL)(
+        parseLessEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS_EQUALS)),
+        parseGreaterEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER_EQUALS)),
+        parseLess.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS)),
+        parseGreater.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER))
+      ),
+      Ops(InfixL)(
+        parseLeftShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT)),
+        parseRightShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT))
+      ),
+      Ops(InfixL)(
+        parsePlus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS)),
+        parseMinus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS))
+      ),
+      Ops(InfixL)(
+        parseStar.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR)),
+        parseSlash.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH)),
+        parseModulo.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO))
+      ),
+      Ops(Prefix)(
+        parsePlus.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PLUS)),
+        parseMinus.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.MINUS)),
+        parseNot.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.NOT)),
+        parseIncrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_INCREMENT)),
+        parseDecrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_DECREMENT))
+      ),
+      Ops(Postfix)(
+        parseIncrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.POST_INCREMENT)),
+        parseDecrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.POST_DECREMENT)),
+        (parseLeftBracket ~> delay(parseExpr) <~ parseRightBracket).map(arg => (e: Expr) => IndexExpr(e, arg)),
+        (parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map(args => (e: Expr) => CallExpr(e, args))
+      ),
+      Ops(Postfix)(
+        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, ident.value))
+      )
+    )
+  }
+
+  def parseBlock(using spFunc: SafePointFunc): Parsel[BlockStmt, Token, Diagnostic] = {
+    given SafePointFunc = isSafePointForBlock
+    (parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace).map(BlockStmt(_))
+  }
+
+  def parseStmt(using spFunc: SafePointFunc): Parsel[Stmt, Token, Diagnostic] = {
+    or(
+      (parseBreak <~ parseSemiColon).map(_ => BreakStmt()),
+      (parseContinue <~ parseSemiColon).map(_ => ContinueStmt()),
+      (parseExpr <~ parseSemiColon).map(ExprStmt(_)),
+      parseBlock,
+      ((parseIf ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock ~ optional(parseElse ~> parseBlock)).map(
+        tuple => IfStmt(tuple._1._1, tuple._1._2, tuple._2)
+      ),
+      (parseReturn ~> parseExpr <~ parseSemiColon).map(expr => ReturnStmt(expr)),
+      ((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple => WhileStmt(tuple._1, tuple._2))
+    )
   }
 
   // Pre-defined token parsers
@@ -167,6 +268,6 @@ object Parser {
   private val parseIdentifier = parseTok("identifier") { case tok: Token.Identifier => tok }
   private val parseStringLiteral = parseTok("string literal") { case tok: Token.StringLiteral => tok }
   private val parseCharLiteral = parseTok("char literal") { case tok: Token.CharLiteral => tok }
-  private val parseInteger = parseTok("integer") { case tok: Token.Integer => tok }
-  private val parseFloat = parseTok("float") { case tok: Token.Float => tok }
+  private val parseInteger = parseTok("integer") { case tok: Token.IntegerLiteral => tok }
+  private val parseFloat = parseTok("float") { case tok: Token.FloatLiteral => tok }
 }
