@@ -185,8 +185,9 @@ case class WhileStmt(cond: Expr, body: BlockStmt) extends Stmt {
   override def prettyPrint: String = s"while (${cond.prettyPrint}) ${body.prettyPrint}"
 }
 
-// TODO - Has field decl in it
-case class VariableDecl()
+case class VariableDeclStmt(variableDecl: VariableDecl) extends Stmt {
+  override def prettyPrint: String = variableDecl.prettyPrint
+}
 
 // TODO - For loop
 
@@ -273,7 +274,7 @@ case class TypedefDecl(name: String, referredType: TypeRef, modifiers: List[Modi
   override def prettyPrint: String = s"${modifiers.prettyPrint}typedef $name = ${referredType.prettyPrint};"
 }
 
-case class FieldDecl(name: String, typeRef: TypeRef, initExpr: Option[Expr] = None, modifiers: List[ModifierNode] = List.empty) extends Decl {
+case class VariableDecl(name: String, typeRef: TypeRef, initExpr: Option[Expr] = None, modifiers: List[ModifierNode] = List.empty) extends Decl {
   override def prettyPrint: String = s"${modifiers.prettyPrint}${typeRef.prettyPrint} $name${
     initExpr match {
       case Some(expr) => s" = ${expr.prettyPrint}"
@@ -285,15 +286,15 @@ case class TypeParameterDecl(name: String, variance: Variance) extends AstNode {
   override def prettyPrint: String = s"${variance.prettyPrint}$name"
 }
 
-case class MethodDecl(name: String, returnType: TypeRef, parameters: List[FieldDecl], block: BlockStmt, modifiers: List[ModifierNode] = List.empty, typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
+case class FunctionDecl(name: String, returnType: TypeRef, parameters: List[VariableDecl], block: BlockStmt, modifiers: List[ModifierNode] = List.empty, typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
   override def prettyPrint: String = s"${modifiers.prettyPrint} ${returnType.prettyPrint} $name${parameters.map(_.prettyPrint).mkString("(", ", ", ")")}"
 }
 
 case class ClassDecl(name: String,
                      modifiers: List[ModifierNode] = List.empty,
                      superClasses: List[TypeRef] = List.empty,
-                     fields: List[FieldDecl] = List.empty,
-                     methods: List[MethodDecl] = List.empty,
+                     fields: List[VariableDecl] = List.empty,
+                     methods: List[FunctionDecl] = List.empty,
                      nestedClasses: List[ClassDecl] = List.empty,
                      typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
   override def prettyPrint: String = s"${modifiers.prettyPrint} class${typeParameters.prettyPrint} $name${
@@ -304,8 +305,8 @@ case class ClassDecl(name: String,
 
 case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
                      classDecls: List[ClassDecl] = List.empty,
-                     functionDecls: List[MethodDecl] = List.empty,
-                     variableDecls: List[FieldDecl] = List.empty) extends AstNode {
+                     functionDecls: List[FunctionDecl] = List.empty,
+                     variableDecls: List[VariableDecl] = List.empty) extends AstNode {
   override def prettyPrint: String
   = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
 }
