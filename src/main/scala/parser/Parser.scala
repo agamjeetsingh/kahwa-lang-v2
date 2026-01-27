@@ -213,8 +213,25 @@ object Parser {
         tuple => IfStmt(tuple._1._1, tuple._1._2, tuple._2)
       ),
       (parseReturn ~> parseExpr <~ parseSemiColon).map(expr => ReturnStmt(expr)),
-      ((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple => WhileStmt(tuple._1, tuple._2))
+      ((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple => WhileStmt(tuple._1, tuple._2)),
+      (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (optional(parseEquals ~> parseExpr) <~ parseSemiColon)).map(tuple => {
+        val (((modifierNodes, varType), identifier), optionalExpr) = tuple
+        VariableDeclStmt(VariableDecl(identifier.value, varType, optionalExpr, modifierNodes))
+      })
     )
+  }
+
+  def parseFunctionDecl(using spFunc: SafePointFunc): Parsel[FunctionDecl, Token, Diagnostic] = {
+    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (parseLeftParen ~> sepBy(
+      (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
+        val (((modifierNodes, varType), identifier), optionalExpr) = tuple
+        VariableDecl(identifier.value, varType, optionalExpr, modifierNodes)
+      }),
+      parseComma
+    ) <~ parseRightParen) ~ parseBlock).map(tuple => {
+      val ((((modifiers, returnType), identifier), parameters), body) = tuple
+      FunctionDecl(identifier.value, returnType, parameters, body, modifiers, List.empty)
+    })
   }
 
   // Pre-defined token parsers
