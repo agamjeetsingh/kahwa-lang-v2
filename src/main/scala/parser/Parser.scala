@@ -17,12 +17,36 @@ object Parser {
   private def sync(input: Parsel.Input[Token])(using spFunc: SafePointFunc): Parsel.Input[Token] = {
     var i = input
     while (i.current match {
-      case Some(token) => spFunc(token)
+      case Some(token) => !spFunc(token)
       case None => false
     }) {
       i = i.advance
     }
     i
+  }
+
+  val isSafePointForFile: SafePointFunc = token => token match {
+    case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) => true
+    case t if t.isModifier => true
+    case _ => false
+  }
+
+  val isSafePointForClass: SafePointFunc = token => token match {
+    case Token.Identifier(_, _) => true
+    case t if t.isModifier => true
+    case _ => false
+  }
+
+  val skipNothing: SafePointFunc = _ => true
+
+  val isSafePointForStmt: SafePointFunc = token => token match {
+    case Token.Static(_) | Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
+    case _ => false
+  }
+
+  val isSafePointForBlock: SafePointFunc = token => token match {
+    case Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
+    case _ => false
   }
 
   private def parseToken[A](tokenMatch: Token => Option[A], notMatchError: Token => Diagnostic, endOfFileError: SourceRange => Diagnostic): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
