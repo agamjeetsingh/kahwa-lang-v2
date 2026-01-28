@@ -75,8 +75,8 @@ object Parsel {
     case EmptyTuple => Nothing
     case (_, Parsel[r, Token, Error]) *: t => r | UnionOfParsers[t, Token, Error]
 
-  def or[K, T <: Tuple, Token, Error](discriminator: Parsel.Input[Token] => Option[K], args: T,
-                        keyFoundButNotInArgsList: K => Iterable[Error] = (_: K) => Iterable.empty)(using
+  def or[K, Token, T <: Tuple, Error](discriminator: Parsel.Input[Token] => Option[K], args: T,
+                        keyFoundButNotInArgsList: K => Iterable[Error])(using
                                                                         // Ensure input matches ((K, Parser), (K, Parser)...)
                                                                         ev: T <:< EnforceStructure[T, K, Token, Error]
                        ): Parsel[UnionOfParsers[T, Token, Error], Token, Error] = {
@@ -328,4 +328,23 @@ object Parsel {
       parseExprWithLevel(input, 0)
     })
   }
+
+  def sync[Token](input: Parsel.Input[Token])(using spFunc: SafePointFunction[Token]): Parsel.Input[Token] = {
+    var i = input
+    while (i.current match {
+      case Some(token) => !spFunc(token)
+      case None => false
+    }) {
+      i = i.advance
+    }
+    i
+  }
+  
+  def commit[A, Token, Error](parser: Parsel[A, Token, Error]): Parsel[A, Token, Error] = Parsel((input: Parsel.Input[Token]) => {
+    val (res, next, errs) = parser.parserFunc(input)
+    res match {
+      case Some(_) => (res, next, errs)
+      case None => (res, sync(next), errs)
+    }
+  })
 }

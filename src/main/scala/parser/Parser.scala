@@ -14,17 +14,6 @@ object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
   type SafePointFunc = SafePointFunction[Token]
 
-  private def sync(input: Parsel.Input[Token])(using spFunc: SafePointFunc): Parsel.Input[Token] = {
-    var i = input
-    while (i.current match {
-      case Some(token) => !spFunc(token)
-      case None => false
-    }) {
-      i = i.advance
-    }
-    i
-  }
-
   val isSafePointForFile: SafePointFunc = {
     case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) => true
     case t if t.isModifier => true
