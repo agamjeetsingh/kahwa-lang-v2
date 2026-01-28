@@ -153,6 +153,51 @@ object Parsel {
     })
   }
 
+  def fully[A, Token, Error](parsel: Parsel[A, Token, Error]): Parsel[List[A], Token, Error] = {
+    Parsel((input: Parsel.Input[Token]) => {
+      @scala.annotation.tailrec
+      def loop(currentInput: Parsel.Input[Token],
+               lastAttemptPos: Int,
+               acc: List[A],
+               accErrors: Iterable[Error]): (Option[List[A]], Parsel.Input[Token], Iterable[Error]) = {
+        // Check if at EOF before attempting to parse
+        currentInput.current match {
+          case None =>
+            // At EOF - return accumulated results without trying to parse
+            (Some(acc.reverse), currentInput, accErrors)
+          case Some(_) =>
+            // Not at EOF - proceed with parsing
+            val (res, nextInput, errs) = parsel.parserFunc(currentInput)
+            res match {
+              case Some(a) =>
+                // Successful parse - accumulate result and errors, continue from next input
+                loop(nextInput, nextInput.index, a :: acc, accErrors ++ errs)
+              case None =>
+                // Failed parse - check if nextInput is at EOF or need to sync and continue
+                nextInput.current match {
+                  case Some(_) =>
+                    // Not at EOF - sync to next safe point
+                    val syncedInput = sync(nextInput)
+                    // If we're stuck at the same position (sync didn't advance past where we tried before),
+                    // force skip one token to make progress and avoid infinite loop
+                    val progressInput = if (syncedInput.index <= lastAttemptPos) {
+                      currentInput.advance
+                    } else {
+                      syncedInput
+                    }
+                    loop(progressInput, progressInput.index, acc, accErrors ++ errs)
+                  case None =>
+                    // At EOF after failed parse - return accumulated results including errors from this parse
+                    (Some(acc.reverse), nextInput, accErrors ++ errs)
+                }
+            }
+        }
+      }
+
+      loop(input, -1, List.empty, Iterable.empty)
+    })
+  }
+
   def optional[A, Token, Error](parsel: Parsel[A, Token, Error]): Parsel[Option[A], Token, Error] = {
     Parsel((input: Parsel.Input[Token]) => {
       val (res, next, errs) = parsel.parserFunc(input)
