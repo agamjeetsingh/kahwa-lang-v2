@@ -7,7 +7,7 @@ import sources.SourceRange
 
 import scala.language.postfixOps
 import parser.Parsel.*
-import parser.Token.{Class, Identifier, LeftBracket, LeftCurlyBrace, Private, RightBracket, RightCurlyBrace}
+import parser.Token.{Class, Equals, Identifier, LeftBracket, LeftCurlyBrace, Private, RightBracket, RightCurlyBrace, SemiColon, Typedef}
 import parser.Parsel.list
 
 object Parser {
@@ -44,10 +44,10 @@ object Parser {
         val matched = tokenMatch(token)
         matched match {
           case Some(value: A) => (matched, input.advance, Iterable.empty)
-          case None => (None, input.advance, List(notMatchError(token)))
+          case None => (None, input, List(notMatchError(token)))
         }
       }
-      case None => (None, input.advance, List(endOfFileError(input.last match {
+      case None => (None, input, List(endOfFileError(input.last match {
         case Some(token) => token.range
         case None => SourceRange(-1, 0, 0)
       })))
@@ -87,7 +87,7 @@ object Parser {
   }
 
   lazy val parseTypedefDecl: SafePointFunc ?=> Parsel[TypedefDecl, Token, Diagnostic] = {
-    (list(parseModifierNode) ~ (parseTypedef ~> parseIdentifier <~ parseEquals) ~ parseTypeRef).map { case ((modifierNodes, identifier), typeRef) =>
+    ((list(parseModifierNode) <~ parseTypedef) ~ commit((parseIdentifier <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { case (modifierNodes, (identifier, typeRef)) =>
       TypedefDecl(identifier.value, typeRef, modifierNodes)
     }
   }
