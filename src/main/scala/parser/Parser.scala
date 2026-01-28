@@ -249,7 +249,33 @@ object Parser {
   }
 
   lazy val parseKahwaFile: SafePointFunc ?=> Parsel[KahwaFile, Token, Diagnostic] = {
-    list(or(parseClassDecl, parseFunctionDecl, parseTypedef)).map(fileMembers => {
+    fully(or(
+      (input: Input[Token]) => {
+        (list(parseModifierNode) <~ parseTypedef)(input)._1 match {
+          case Some(_) => Some(2)
+          case None => Some(-1)
+          case _ => {
+            (list(parseModifierNode) <~ parseClassDecl)(input)._1 match {
+              case Some(_) => Some(0)
+              case None => {
+                (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
+                  parseLeftParen)(input)._1 match {
+                  case Some(_) => Some(1)
+                  case None => {
+                    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ or(parseSemiColon, parseEquals))(input)._1 match {
+                      case Some(_) => Some(3)
+                      case None => Some(-1)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      (0 -> parseClassDecl, 1 -> parseFunctionDecl, 2 -> parseTypedefDecl, 3 -> parseVariableDecl),
+      _ => Iterable[Diagnostic]().empty
+    )).map(fileMembers => {
       KahwaFile(
         fileMembers.collect { case decl: TypedefDecl => decl },
         fileMembers.collect { case decl: ClassDecl => decl },
