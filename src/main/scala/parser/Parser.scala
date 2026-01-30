@@ -22,6 +22,7 @@ object Parser {
 
   val isSafePointForClass: SafePointFunc = {
     case Token.Identifier(_, _) => true
+    case Token.RightCurlyBrace(_) => true
     case t if t.isModifier => true
     case _ => false
   }
@@ -233,18 +234,18 @@ object Parser {
 
   lazy val parseClassDecl: SafePointFunc ?=> Parsel[ClassDecl, Token, Diagnostic] = {
     ((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
-      parseGenericArguments ~
+      optional(parseGenericArguments) ~
       optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
-      (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl)) <~ parseRightCurlyBrace)).map(tuple => {
-      val ((((modifierNodes, identifier), typeParameters), optionalSuperClasses), classMembers) = tuple
+      (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl, parseVariableDecl <~ parseSemiColon)) <~ parseRightCurlyBrace)).map(tuple => {
+      val ((((modifierNodes, identifier), optionalTypeParameters), optionalSuperClasses), classMembers) = tuple
       ClassDecl(
         identifier.value,
         modifierNodes,
         optionalSuperClasses.getOrElse(Nil),
-        List.empty, // TODO
+        classMembers.collect { case decl: VariableDecl => decl },
         classMembers.collect { case decl: FunctionDecl => decl },
         classMembers.collect { case decl: ClassDecl => decl },
-        typeParameters)
+        optionalTypeParameters.getOrElse(Nil))
     })
   }
 
@@ -253,9 +254,8 @@ object Parser {
       (input: Input[Token]) => {
         (list(parseModifierNode) <~ parseTypedef)(input)._1 match {
           case Some(_) => Some(2)
-          case None => Some(-1)
-          case _ => {
-            (list(parseModifierNode) <~ parseClassDecl)(input)._1 match {
+          case None => {
+            (list(parseModifierNode) <~ parseClass)(input)._1 match {
               case Some(_) => Some(0)
               case None => {
                 (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
@@ -273,7 +273,7 @@ object Parser {
           }
         }
       },
-      (0 -> parseClassDecl, 1 -> parseFunctionDecl, 2 -> parseTypedefDecl, 3 -> parseVariableDecl),
+      (0 -> parseClassDecl, 1 -> parseFunctionDecl, 2 -> parseTypedefDecl, 3 -> (parseVariableDecl <~ parseSemiColon)),
       _ => Iterable[Diagnostic]().empty
     )).map(fileMembers => {
       KahwaFile(

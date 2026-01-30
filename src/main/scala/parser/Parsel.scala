@@ -55,7 +55,7 @@ class Parsel[+A, Token, Error](val parserFunc: ParserFunction[A, Token, Error]) 
 }
 
 object Parsel {
-  case class Input[T](source: Vector[T], index: Int) { 
+  case class Input[T](source: Vector[T], index: Int = 0) { 
     def current: Option[T] = source.lift(index) 
     def advance: Input[T] = copy(index = index + 1)
     def last: Option[T] = {
