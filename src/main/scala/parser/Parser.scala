@@ -81,8 +81,8 @@ object Parser {
     (parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map {
       case (ident, optionalArgs) =>
         optionalArgs match {
-          case Some(args) => TypeRef(ident.value, args.map(_.swap))
-          case None => TypeRef(ident.value, List.empty)
+          case Some(args) => TypeRef(Ident(ident.value), args.map(_.swap))
+          case None => TypeRef(Ident(ident.value), List.empty)
         }
     }
   }
@@ -183,7 +183,7 @@ object Parser {
         (parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map(args => (e: Expr) => CallExpr(e, args))
       ),
       Ops(Postfix)(
-        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, ident.value))
+        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, Ident(ident.value)))
       )
     )
   }

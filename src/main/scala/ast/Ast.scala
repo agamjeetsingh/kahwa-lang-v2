@@ -141,7 +141,7 @@ case class IndexExpr(callee: Expr, arg: Expr) extends Expr {
   override def prettyPrint: String = s"${callee.prettyPrint}[${arg.prettyPrint}]"
 }
 
-case class MemberAccessExpr(base: Expr, member: String) extends Expr {
+case class MemberAccessExpr(base: Expr, member: Ident) extends Expr {
   override def prettyPrint: String = s"${base.prettyPrint}.$member"
 }
 
@@ -206,7 +206,7 @@ enum Variance extends PrettyPrintable {
   }
 }
 
-case class TypeRef(name: String, args: List[(TypeRef, Variance)] = List.empty) extends AstNode {
+case class TypeRef(name: Ident, args: List[(TypeRef, Variance)] = List.empty) extends AstNode {
   override def prettyPrint: String = {
     val prettyArgs = if args.nonEmpty then args.map {
       (typeRef, variance) => s"${variance.prettyPrint}${typeRef.prettyPrint}"
