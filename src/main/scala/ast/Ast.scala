@@ -287,7 +287,7 @@ case class TypeParameterDecl(name: String, variance: Variance) extends AstNode {
 }
 
 case class FunctionDecl(name: String, returnType: TypeRef, parameters: List[VariableDecl], block: BlockStmt, modifiers: List[ModifierNode] = List.empty, typeParameters: List[TypeParameterDecl] = List.empty) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint} ${returnType.prettyPrint} $name${parameters.map(_.prettyPrint).mkString("(", ", ", ")")}"
+  override def prettyPrint: String = s"${modifiers.prettyPrint} ${returnType.prettyPrint} $name${parameters.map(_.prettyPrint.init).mkString("(", ", ", ")")}${block.prettyPrint}"
 }
 
 case class ClassDecl(name: String,
