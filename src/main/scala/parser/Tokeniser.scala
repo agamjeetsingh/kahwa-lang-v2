@@ -3,7 +3,7 @@ package parser
 import diagnostics.Diagnostic
 import Parsel.*
 import ast.StringLiteral
-import parser.Token.{CharLiteral, Identifier}
+import parser.Token.*
 import sources.SourceRange
 
 object Tokeniser {
@@ -170,76 +170,6 @@ object Tokeniser {
   private def parseLogicalOrToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
     parseCharsToT("||", Token.LogicalOr(_))
 
-  // Keywords (must come before identifier)
-  private def parseProtectedToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("protected", Token.Protected(_))
-
-  private def parseAbstractToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("abstract", Token.Abstract(_))
-
-  private def parseInterfaceToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("interface", Token.Interface(_))
-
-  private def parseContinueToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("continue", Token.Continue(_))
-
-  private def parseOverrideToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("override", Token.Override(_))
-
-  private def parseTypedefToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("typedef", Token.Typedef(_))
-
-  private def parsePrivateToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("private", Token.Private(_))
-
-  private def parseStaticToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("static", Token.Static(_))
-
-  private def parsePublicToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("public", Token.Public(_))
-
-  private def parseReturnToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("return", Token.Return(_))
-
-  private def parseClassToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("class", Token.Class(_))
-
-  private def parseFinalToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("final", Token.Final(_))
-
-  private def parseWhileToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("while", Token.While(_))
-
-  private def parseBreakToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("break", Token.Break(_))
-
-  private def parseFalseToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("false", Token.False(_))
-
-  private def parseOpenToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("open", Token.Open(_))
-
-  private def parseTrueToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("true", Token.True(_))
-
-  private def parseNullToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("null", Token.NullLiteral(_))
-
-  private def parseElseToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("else", Token.Else(_))
-
-  private def parseForToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("for", Token.For(_))
-
-  private def parseOutToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("out", Token.Out(_))
-
-  private def parseInToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("in", Token.In(_))
-
-  private def parseIfToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
-    parseCharsToT("if", Token.If(_))
-
   // 1-character operators and punctuation
   private def parseColonToken(using fileId: Int)(using SafePointFunction[Char]): Parsel[Token, Char, Diagnostic] =
     parseCharsToT(":", Token.Colon(_))
@@ -345,11 +275,37 @@ object Tokeniser {
     }) <~ skipTrivia
   }
 
-  private def parseIdentifierToken(using fileId: Int): Parsel[Token, Char, Diagnostic] = {
+  private def parseIdentifierOrKeywordToken(using fileId: Int): Parsel[Token, Char, Diagnostic] = {
     given SafePointFunction[Char] = _ => false
     (parseAlphabetOrUnderscore ~ list(parseAlphabetOrUnderscoreOrDigit)).map((tuple: (Char, List[Char]), input: Input[Char]) => {
       val (c, cs) = tuple
-      Identifier((c :: cs).mkString, SourceRange(fileId, input.index, cs.size + 1))
+      val str = (c :: cs).mkString
+      val sourceRange = SourceRange(fileId, input.index, cs.size + 1)
+      str match
+        case "protected" => Protected(sourceRange)
+        case "abstract" => Abstract(sourceRange)
+        case "interface" => Interface(sourceRange)
+        case "continue" => Continue(sourceRange)
+        case "override" => Override(sourceRange)
+        case "typedef" => Typedef(sourceRange)
+        case "private" => Private(sourceRange)
+        case "static" => Static(sourceRange)
+        case "public" => Public(sourceRange)
+        case "return" => Return(sourceRange)
+        case "class" => Class(sourceRange)
+        case "final" => Final(sourceRange)
+        case "while" => While(sourceRange)
+        case "break" => Break(sourceRange)
+        case "false" => False(sourceRange)
+        case "open" => Open(sourceRange)
+        case "true" => True(sourceRange)
+        case "null" => NullLiteral(sourceRange)
+        case "else" => Else(sourceRange)
+        case "for" => For(sourceRange)
+        case "out" => Out(sourceRange)
+        case "in" => In(sourceRange)
+        case "if" => If(sourceRange)
+        case _ => Identifier(str, sourceRange)
     }) <~ skipTrivia
   }
 
@@ -380,37 +336,13 @@ object Tokeniser {
       parseLogicalAndToken,
       parseLogicalOrToken,
 
-      parseProtectedToken,
-      parseAbstractToken,
-      parseInterfaceToken,
-      parseContinueToken,
-      parseOverrideToken,
-      parseTypedefToken,
-      parsePrivateToken,
-      parseStaticToken,
-      parsePublicToken,
-      parseReturnToken,
-      parseClassToken,
-      parseFinalToken,
-      parseWhileToken,
-      parseBreakToken,
-      parseFalseToken,
-      parseOpenToken,
-      parseTrueToken,
-      parseNullToken,
-      parseElseToken,
-      parseForToken,
-      parseOutToken,
-      parseInToken,
-      parseIfToken,
-
       // Literals (float before integer for longest match)
       parseStringLiteralToken,
       parseCharLiteralToken,
       parseFloatLiteralToken,
       parseIntegerLiteralToken,
 
-      parseIdentifierToken,
+      parseIdentifierOrKeywordToken,
 
       parseColonToken,
       parseSemiColonToken,
