@@ -224,8 +224,8 @@ object Parser {
   }
 
   lazy val parseGenericArguments: SafePointFunc ?=> Parsel[List[TypeParameterDecl], Token, Diagnostic] = {
-    (parseLeftBracket ~> sepBy(parseVariance ~ parseIdentifier, parseComma) <~ parseRightBracket).map(genericArgs => {
-      genericArgs.map((variance, identifier) => TypeParameterDecl(identifier.value, variance))
+    (parseLeftBracket ~> sepBy(parseVariance ~ parseTypeRef, parseComma) <~ parseRightBracket).map(genericArgs => {
+      genericArgs.map((variance, typeRef) => TypeParameterDecl(typeRef.name.name, variance))
     })
   }
 
