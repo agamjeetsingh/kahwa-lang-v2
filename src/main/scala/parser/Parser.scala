@@ -362,4 +362,23 @@ object Parser {
   private val parseCharLiteral = parseTok("char literal") { case tok: Token.CharLiteral => tok }
   private val parseInteger = parseTok("integer") { case tok: Token.IntegerLiteral => tok }
   private val parseFloat = parseTok("float") { case tok: Token.FloatLiteral => tok }
+
+  def spanned[A, T, Error](parser: Parsel[A, T, Error]): Parsel[(A, SourceRange), T, Error] = {
+    Parsel((input: Input[T]) => {
+      val (res, next, errs) = parser(input)
+      res match {
+        case Some(a) =>
+          val range = if (input.index < next.index) {
+            // Get range from first to last consumed token
+            val firstToken = input.source(input.index).asInstanceOf[Token]
+            val lastToken = input.source(next.index - 1).asInstanceOf[Token]
+            firstToken.range <-> lastToken.range
+          } else {
+            SourceRange.dummy
+          }
+          (Some((a, range)), next, errs)
+        case None => (None, next, errs)
+      }
+    })
+  }
 }
