@@ -108,7 +108,7 @@ object SemanticAnalyser {
 
     diagnostics ++= modifierNotAllowed(classDecl.modifiers, Set(Modifier.STATIC, Modifier.OVERRIDE).contains)
 
-//    classSymbol.setModality(resolveModality(classDecl.modifiers) ~> diagnostics)
+    classSymbol.setModality(resolveModality(classDecl.modifiers) ~> diagnostics)
 
     (classSymbol, diagnostics.toList)
   }

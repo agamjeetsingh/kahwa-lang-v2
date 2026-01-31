@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockStmt, Expr, Variance}
+import ast.{BlockStmt, Expr, Modifier, Variance}
 import ast.Variance.INVARIANT
 
 import scala.collection.mutable.ListBuffer
@@ -31,9 +31,21 @@ class TypeParameterSymbol(override val name: String, outerScope: Scope, variance
 
 class SemanticType(val typeSymbol: TypeSymbol, val genericArguments: List[SemanticType])
 
-class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
+sealed trait Modal {
   var isAbstract: Boolean = false
   var isOpen: Boolean = false
+
+  def setModality(modifier: Modifier): Unit = {
+    modifier match {
+      case Modifier.OPEN => isAbstract = false; isOpen = true
+      case Modifier.FINAL => isAbstract = false; isOpen = false
+      case Modifier.ABSTRACT => isAbstract = true; isOpen = true
+      case _ =>
+    }
+  }
+}
+
+class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope), Modal {
   var visibility: Visibility = Visibility.default
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
@@ -50,9 +62,7 @@ class VisibleVariableSymbol(override val name: String, outerScope: Scope, overri
   var visibility: Visibility = Visibility.default
 }
 
-class FieldSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VisibleVariableSymbol(name, outerScope, semanticType, initExpr) {
-  var isAbstract: Boolean = false
-  var isOpen: Boolean = false
+class FieldSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VisibleVariableSymbol(name, outerScope, semanticType, initExpr), Modal {
   var isAnOverride: Boolean = false
 }
 
@@ -68,9 +78,7 @@ class FunctionSymbol(override val name: String, outerScope: Scope) extends Symbo
   var returnType: SemanticType = GlobalScope.NothingType
 }
 
-class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope) {
-  var isAbstract: Boolean = false
-  var isOpen: Boolean = false
+class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope), Modal {
   var isAnOverride: Boolean = false
 }
 
