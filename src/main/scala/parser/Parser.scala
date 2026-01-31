@@ -50,7 +50,7 @@ object Parser {
       }
       case None => (None, input, List(endOfFileError(input.last match {
         case Some(token) => token.range
-        case None => SourceRange(-1, 0, 0)
+        case None => SourceRange.dummy
       })))
     })
   
@@ -72,24 +72,24 @@ object Parser {
         case Token.Final(_) => Modifier.FINAL
         case Token.Abstract(_) => Modifier.ABSTRACT
         case _ => throw IllegalStateException("Unreachable in parseModifierNode()")
-      }))
+      }, token.range))
     } else {
       None
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
 
   lazy val parseTypeRef: SafePointFunc ?=> Parsel[TypeRef, Token, Diagnostic] = {
-    (parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map {
-      case (ident, optionalArgs) =>
-        optionalArgs match {
-          case Some(args) => TypeRef(Ident(ident.value), args.map(_.swap))
-          case None => TypeRef(Ident(ident.value), List.empty)
-        }
+    spanned(parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map { tuple =>
+      val ((ident, optionalArgs), range) = tuple
+      optionalArgs match {
+        case Some(args) => TypeRef(Unqual(ident.value), args.map(_.swap), range)
+        case None => TypeRef(Unqual(ident.value), List.empty, range)
+      }
     }
   }
 
   lazy val parseTypedefDecl: SafePointFunc ?=> Parsel[TypedefDecl, Token, Diagnostic] = {
-    ((list(parseModifierNode) <~ parseTypedef) ~ commit((parseIdentifier <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { case (modifierNodes, (identifier, typeRef)) =>
-      TypedefDecl(identifier.value, typeRef, modifierNodes)
+    spanned((list(parseModifierNode) <~ parseTypedef) ~ commit((parseIdentifier <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { case ((modifierNodes, (identifier, typeRef)), range: SourceRange) =>
+      TypedefDecl(identifier.value, typeRef, modifierNodes, range)
     }
   }
 
@@ -103,13 +103,13 @@ object Parser {
 
   lazy val atomExpr: SafePointFunc ?=> Parsel[Expr, Token, Diagnostic] = {
     or(
-      parseTrue.map(_ => BoolLiteral(true)),
-      parseFalse.map(_ => BoolLiteral(false)),
-      parseNull.map(_ => NullLiteral()),
-      parseFloat.map(tok => FloatLiteral(tok.value)),
-      parseInteger.map(tok => IntegerLiteral(tok.value)),
-      parseStringLiteral.map(tok => StringLiteral(tok.value)),
-      parseIdentifier.map(tok => Ident(tok.value))
+      parseTrue.map(tok => BoolLiteral(true, tok.range)),
+      parseFalse.map(tok => BoolLiteral(false, tok.range)),
+      parseNull.map(tok => NullLiteral(tok.range)),
+      parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
+      parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
+      parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
+      parseIdentifier.map(tok => Unqual(tok.value, tok.range))
     )
   }
 
@@ -119,94 +119,107 @@ object Parser {
       parseLeftParen ~> delay(parseExpr) <~ parseRightParen
     )(
       Ops(InfixR)(
-        parseEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.EQUALS)),
-        parsePlusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS_EQUALS)),
-        parseMinusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS_EQUALS)),
-        parseStarEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR_EQUALS)),
-        parseSlashEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH_EQUALS)),
-        parseModuloEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO_EQUALS)),
-        parseLeftShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT_EQUALS)),
-        parseRightShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT_EQUALS)),
-        parseBitwiseAndEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND_EQUALS)),
-        parseBitwiseOrEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR_EQUALS)),
-        parseBitwiseXorEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR_EQUALS))
+        parseEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.EQUALS, l.range <-> r.range)),
+        parsePlusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS_EQUALS, l.range <-> r.range)),
+        parseMinusEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS_EQUALS, l.range <-> r.range)),
+        parseStarEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR_EQUALS, l.range <-> r.range)),
+        parseSlashEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH_EQUALS, l.range <-> r.range)),
+        parseModuloEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO_EQUALS, l.range <-> r.range)),
+        parseLeftShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT_EQUALS, l.range <-> r.range)),
+        parseRightShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT_EQUALS, l.range <-> r.range)),
+        parseBitwiseAndEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND_EQUALS, l.range <-> r.range)),
+        parseBitwiseOrEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR_EQUALS, l.range <-> r.range)),
+        parseBitwiseXorEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR_EQUALS, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseLogicalOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_OR))
+        parseLogicalOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_OR, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseLogicalAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_AND))
+        parseLogicalAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_AND, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseBitwiseOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR))
+        parseBitwiseOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseBitwiseXor.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR))
+        parseBitwiseXor.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseBitwiseAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND))
+        parseBitwiseAnd.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseDoubleEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.DOUBLE_EQUALS)),
-        parseNotEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.NOT_EQUALS))
+        parseDoubleEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.DOUBLE_EQUALS, l.range <-> r.range)),
+        parseNotEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.NOT_EQUALS, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseLessEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS_EQUALS)),
-        parseGreaterEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER_EQUALS)),
-        parseLess.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS)),
-        parseGreater.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER))
+        parseLessEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS_EQUALS, l.range <-> r.range)),
+        parseGreaterEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER_EQUALS, l.range <-> r.range)),
+        parseLess.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS, l.range <-> r.range)),
+        parseGreater.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseLeftShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT)),
-        parseRightShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT))
+        parseLeftShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT, l.range <-> r.range)),
+        parseRightShift.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parsePlus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS)),
-        parseMinus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS))
+        parsePlus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.PLUS, l.range <-> r.range)),
+        parseMinus.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MINUS, l.range <-> r.range))
       ),
       Ops(InfixL)(
-        parseStar.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR)),
-        parseSlash.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH)),
-        parseModulo.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO))
+        parseStar.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR, l.range <-> r.range)),
+        parseSlash.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH, l.range <-> r.range)),
+        parseModulo.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO, l.range <-> r.range))
       ),
       Ops(Prefix)(
-        parsePlus.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PLUS)),
-        parseMinus.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.MINUS)),
-        parseNot.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.NOT)),
-        parseIncrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_INCREMENT)),
-        parseDecrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_DECREMENT))
+        parsePlus.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.PLUS, tok.range <-> e.range)),
+        parseMinus.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.MINUS, tok.range <-> e.range)),
+        parseNot.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.NOT, tok.range <-> e.range)),
+        parseIncrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_INCREMENT, tok.range <-> e.range)),
+        parseDecrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.PRE_DECREMENT, tok.range <-> e.range))
       ),
       Ops(Postfix)(
-        parseIncrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.POST_INCREMENT)),
-        parseDecrement.map(_ => (e: Expr) => UnaryExpr(e, UnaryOp.POST_DECREMENT)),
-        (parseLeftBracket ~> delay(parseExpr) <~ parseRightBracket).map(arg => (e: Expr) => IndexExpr(e, arg)),
-        (parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map(args => (e: Expr) => CallExpr(e, args))
+        parseIncrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.POST_INCREMENT, tok.range <-> e.range)),
+        parseDecrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.POST_DECREMENT, tok.range <-> e.range)),
+        spanned(parseLeftBracket ~> delay(parseExpr) <~ parseRightBracket).map(tuple =>
+          val (arg, range) = tuple
+          (e: Expr) => IndexExpr(e, arg, e.range <-> range)),
+        spanned(parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map(tuple =>
+          val (args, range) = tuple
+          (e: Expr) => CallExpr(e, args, e.range <-> range))
       ),
       Ops(Postfix)(
-        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, Ident(ident.value)))
+        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, Unqual(ident.value), e.range <-> ident.range))
       )
     )
   }
 
   lazy val parseBlock: SafePointFunc ?=> Parsel[BlockStmt, Token, Diagnostic] = {
     given SafePointFunc = isSafePointForBlock
-    (parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace).map(BlockStmt(_))
+    spanned(parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace).map(tuple =>
+      val (stmts, range) = tuple
+      BlockStmt(stmts, range)
+    )
   }
 
   lazy val parseStmt: SafePointFunc ?=> Parsel[Stmt, Token, Diagnostic] = {
     or(
-      (parseBreak <~ parseSemiColon).map(_ => BreakStmt()),
-      (parseContinue <~ parseSemiColon).map(_ => ContinueStmt()),
-      (parseExpr <~ parseSemiColon).map(ExprStmt(_)),
+      (parseBreak <~ parseSemiColon).map(tok => BreakStmt(tok.range)),
+      (parseContinue <~ parseSemiColon).map(tok => ContinueStmt(tok.range)),
+      (parseExpr <~ parseSemiColon).map(expr => ExprStmt(expr, expr.range)),
       parseBlock,
-      ((parseIf ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock ~ optional(parseElse ~> parseBlock)).map(
-        tuple => IfStmt(tuple._1._1, tuple._1._2, tuple._2)
+      spanned((parseIf ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock ~ optional(parseElse ~> parseBlock)).map(tuple =>
+        val (((expr, ifBlock), optionalElseBlock), range) = tuple
+        IfStmt(expr, ifBlock, optionalElseBlock, range)
       ),
-      (parseReturn ~> parseExpr <~ parseSemiColon).map(expr => ReturnStmt(expr)),
-      ((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple => WhileStmt(tuple._1, tuple._2)),
-      (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (optional(parseEquals ~> parseExpr) <~ parseSemiColon)).map(tuple => {
-        val (((modifierNodes, varType), identifier), optionalExpr) = tuple
-        VariableDeclStmt(VariableDecl(identifier.value, varType, optionalExpr, modifierNodes))
+      spanned(parseReturn ~> parseExpr <~ parseSemiColon).map(tuple =>
+        val (expr, range) = tuple
+        ReturnStmt(expr, range)
+      ),
+      spanned((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple =>
+        val ((expr, blockStmt), range) = tuple
+        WhileStmt(expr, blockStmt, range)),
+      spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (optional(parseEquals ~> parseExpr) <~ parseSemiColon)).map(tuple => {
+        val ((((modifierNodes, varType), identifier), optionalExpr), range) = tuple
+        VariableDeclStmt(VariableDecl(identifier.value, varType, optionalExpr, modifierNodes, range))
       })
     )
   }
@@ -218,26 +231,26 @@ object Parser {
   }
 
   lazy val parseFunctionDecl: SafePointFunc ?=> Parsel[FunctionDecl, Token, Diagnostic] = {
-    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
+    spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
       (parseLeftParen ~> sepBy(parseVariableDecl, parseComma) <~ parseRightParen) ~ parseBlock).map(tuple => {
-      val ((((modifiers, returnType), identifier), parameters), body) = tuple
-      FunctionDecl(identifier.value, returnType, parameters, body, modifiers, List.empty)
+      val (((((modifiers, returnType), identifier), parameters), body), range) = tuple
+      FunctionDecl(identifier.value, returnType, parameters, body, modifiers, List.empty, range)
     })
   }
 
   lazy val parseVariableDecl: SafePointFunc ?=> Parsel[VariableDecl, Token, Diagnostic] = {
-    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
-      val (((modifierNodes, varType), identifier), optionalExpr) = tuple
-      VariableDecl(identifier.value, varType, optionalExpr, modifierNodes)
+    spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
+      val ((((modifierNodes, varType), identifier), optionalExpr), range) = tuple
+      VariableDecl(identifier.value, varType, optionalExpr, modifierNodes, range)
     })
   }
 
   lazy val parseClassDecl: SafePointFunc ?=> Parsel[ClassDecl, Token, Diagnostic] = {
-    ((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
+    spanned((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
       optional(parseGenericArguments) ~
       optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
       (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl, parseVariableDecl <~ parseSemiColon)) <~ parseRightCurlyBrace)).map(tuple => {
-      val ((((modifierNodes, identifier), optionalTypeParameters), optionalSuperClasses), classMembers) = tuple
+      val (((((modifierNodes, identifier), optionalTypeParameters), optionalSuperClasses), classMembers), range) = tuple
       ClassDecl(
         identifier.value,
         modifierNodes,
@@ -245,7 +258,8 @@ object Parser {
         classMembers.collect { case decl: VariableDecl => decl },
         classMembers.collect { case decl: FunctionDecl => decl },
         classMembers.collect { case decl: ClassDecl => decl },
-        optionalTypeParameters.getOrElse(Nil))
+        optionalTypeParameters.getOrElse(Nil),
+        range)
     })
   }
 
@@ -281,6 +295,7 @@ object Parser {
         fileMembers.collect { case decl: ClassDecl => decl },
         fileMembers.collect { case decl: FunctionDecl => decl },
         fileMembers.collect { case decl: VariableDecl => decl },
+        SourceRange.dummy // TODO
       )
     })
   }
