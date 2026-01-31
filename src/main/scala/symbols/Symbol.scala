@@ -12,6 +12,16 @@ sealed abstract class Symbol(val name: String, outerScope: Scope) {
     s.addOuterScope(outerScope)
     s
   }
+  
+  def isType: Boolean = this match {
+    case symbol: TypeSymbol => true
+    case symbol: VariableSymbol => false
+  }
+  
+  def isTerm: Boolean = this match {
+    case symbol: TypeSymbol => false
+    case symbol: VariableSymbol => true
+  }
 }
 
 class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
