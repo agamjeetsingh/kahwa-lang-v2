@@ -299,7 +299,7 @@ case class VariableDecl(name: String,
     }};"
 }
 
-case class TypeParameterDecl(name: String, variance: Variance, range: SourceRange = SourceRange.dummy) extends AstNode {
+case class TypeParameterDecl(name: String, variance: Variance, range: SourceRange = SourceRange.dummy, modifiers: List[ModifierNode] = List.empty) extends Decl {
   override def prettyPrint: String = s"${variance.prettyPrint}$name"
 }
 
