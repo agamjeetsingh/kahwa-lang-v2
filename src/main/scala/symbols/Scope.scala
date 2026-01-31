@@ -9,7 +9,7 @@ class Scope {
   def searchCurrentForType(name: String): List[Symbol] = {
     typeSymbolTable.getOrElse(name, Nil).toList
   }
-  
+
   def searchCurrentForTerm(name: String): List[Symbol] = {
     termSymbolTable.getOrElse(name, Nil).toList
   }
@@ -45,4 +45,8 @@ class Scope {
   private val termSymbolTable: SymbolTable = mutable.Map.empty
 
   private val outerScopes: mutable.ListBuffer[Scope] = mutable.ListBuffer.empty
+}
+
+object GlobalScope extends Scope {
+  val NothingType: SemanticType = SemanticType(TypeSymbol("Nothing", GlobalScope), List.empty)
 }
