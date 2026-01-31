@@ -7,12 +7,12 @@ import sources.SourceRange
 
 import scala.language.postfixOps
 import parser.Parsel.*
-import parser.Token.{Class, Equals, Identifier, LeftBracket, LeftCurlyBrace, Private, RightBracket, RightCurlyBrace, SemiColon, Typedef}
+import parser.Token.{Class, Identifier, Private, RightCurlyBrace, SemiColon, Typedef}
 import parser.Parsel.list
 
 object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
-  type SafePointFunc = SafePointFunction[Token]
+  private type SafePointFunc = SafePointFunction[Token]
 
   val isSafePointForFile: SafePointFunc = {
     case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) => true
@@ -34,20 +34,18 @@ object Parser {
     case _ => false
   }
 
-  val isSafePointForBlock: SafePointFunc = {
+  private val isSafePointForBlock: SafePointFunc = {
     case Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
     case _ => false
   }
 
   private def parseToken[A](tokenMatch: Token => Option[A], notMatchError: Token => Diagnostic, endOfFileError: SourceRange => Diagnostic): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
     input.current match {
-      case Some(token) => {
-        val matched = tokenMatch(token)
+      case Some(token) => val matched = tokenMatch(token)
         matched match {
           case Some(value: A) => (matched, input.advance, Iterable.empty)
           case None => (None, input, List(notMatchError(token)))
         }
-      }
       case None => (None, input, List(endOfFileError(input.last match {
         case Some(token) => token.range
         case None => SourceRange.dummy
@@ -61,7 +59,7 @@ object Parser {
       range => ExpectedSomething(expected, "EOF", range)
     )
 
-  val parseModifierNode: Parsel[ModifierNode, Token, Diagnostic] = parseToken(token =>
+  private val parseModifierNode: Parsel[ModifierNode, Token, Diagnostic] = parseToken(token =>
     if (token.isModifier) {
       Some(ModifierNode(token match {
         case Token.Static(_) => Modifier.STATIC
@@ -378,7 +376,7 @@ object Parser {
   private val parseInteger = parseTok("integer") { case tok: Token.IntegerLiteral => tok }
   private val parseFloat = parseTok("float") { case tok: Token.FloatLiteral => tok }
 
-  def spanned[A, T, Error](parser: Parsel[A, T, Error]): Parsel[(A, SourceRange), T, Error] = {
+  private def spanned[A, T, Error](parser: Parsel[A, T, Error]): Parsel[(A, SourceRange), T, Error] = {
     Parsel((input: Input[T]) => {
       val (res, next, errs) = parser(input)
       res match {
