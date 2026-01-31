@@ -3,6 +3,7 @@ package ast
 import sources.SourceRange
 
 import scala.annotation.targetName
+import symbols.Symbol
 
 sealed trait AstNode extends PrettyPrintable {
   def range: SourceRange
@@ -38,9 +39,14 @@ case class StringLiteral(value: String, range: SourceRange = SourceRange.dummy) 
   override def prettyPrint: String = value
 }
 
-case class Ident(name: String) extends Expr {
+sealed trait Ident extends Expr {
+  def name: String
   override def prettyPrint: String = name
 }
+
+case class Unqual(name: String, range: SourceRange = SourceRange.dummy) extends Ident
+
+case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident
 
 enum BinaryOp extends PrettyPrintable {
   case EQUALS // "="
