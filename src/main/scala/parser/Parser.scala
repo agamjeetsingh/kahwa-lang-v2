@@ -69,6 +69,7 @@ object Parser {
         case Token.Open(_) => Modifier.OPEN
         case Token.Final(_) => Modifier.FINAL
         case Token.Abstract(_) => Modifier.ABSTRACT
+        case Token.Override(_) => Modifier.OVERRIDE
         case _ => throw IllegalStateException("Unreachable in parseModifierNode()")
       }, token.range))
     } else {
