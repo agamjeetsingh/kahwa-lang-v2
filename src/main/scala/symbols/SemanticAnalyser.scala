@@ -1,6 +1,6 @@
 package symbols
 
-import ast.Modifier.{FINAL, PRIVATE, PROTECTED, PUBLIC}
+import ast.Modifier.{FINAL, PRIVATE, PROTECTED, PUBLIC, STATIC}
 import ast.{ClassDecl, Decl, FunctionDecl, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared}
@@ -92,7 +92,7 @@ object SemanticAnalyser {
     registerTerm(
       classSymbol,
       classDecl.methods,
-      methodDecl => (declareMethod(methodDecl, classSymbol.scope), methodDecl.range),
+      methodDecl => (declareMethod(methodDecl, classSymbol.scope) ~> diagnostics, methodDecl.range),
       classSymbol.methods += _,
       duplicatesAllowed = true
     )
@@ -100,7 +100,7 @@ object SemanticAnalyser {
     registerTerm(
       classSymbol,
       classDecl.fields,
-      variableDecl => (declareField(variableDecl, classSymbol.scope), variableDecl.range),
+      variableDecl => (FieldSymbol(variableDecl.name, classSymbol.scope), variableDecl.range),
       classSymbol.fields += _
     )
     
@@ -113,14 +113,31 @@ object SemanticAnalyser {
     (classSymbol, diagnostics.toList)
   }
 
-  private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): MethodSymbol = {
+  private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): (MethodSymbol, List[Diagnostic]) = {
     val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
+    val diagnostics = ListBuffer[Diagnostic]()
 
-    methodSymbol
-  }
+    registerType(
+      methodSymbol,
+      functionDecl.typeParameters,
+      (typeParameterDecl : TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, methodSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
+      methodSymbol.genericArguments += _
+    )
 
-  private def declareField(variableDecl: VariableDecl, outerScope: Scope): FieldSymbol = {
-    ???
+    registerTerm(
+      methodSymbol,
+      functionDecl.parameters,
+      variableDecl => (VariableSymbol(variableDecl.name, methodSymbol.scope), variableDecl.range),
+      methodSymbol.parameters += _
+    )
+
+    methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false) ~> diagnostics
+    methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
+
+    methodSymbol.setModality(resolveModality(functionDecl.modifiers) ~> diagnostics)
+    methodSymbol.isAnOverride = hasModifier(functionDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+
+    (methodSymbol, diagnostics.toList)
   }
 
   private def resolveVisibility(allModifiers: List[ModifierNode], topLevel: Boolean): (Visibility, List[Diagnostic]) = {
@@ -224,5 +241,20 @@ object SemanticAnalyser {
     })
 
     (res, diagnostics.toList)
+  }
+
+  private def hasModifier(modifiers: List[ModifierNode], desiredModifier: Modifier): (Boolean, List[Diagnostic]) = {
+    val diagnostics = ListBuffer[Diagnostic]()
+    var found = false
+    modifiers.foreach(modifierNode => {
+      if (modifierNode.modifier == desiredModifier) {
+        if (!found) found = true
+        else {
+          diagnostics += RepeatedModifier(desiredModifier, modifierNode.range)
+        }
+      }
+      found
+    })
+    (found, diagnostics.toList)
   }
 }

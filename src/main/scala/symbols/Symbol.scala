@@ -15,13 +15,14 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
   }
 
   def isType: Boolean = this match {
-    case symbol: TypeSymbol => true
-    case symbol: VariableSymbol => false
+    case _: TypeSymbol => true
+    case _ => false
   }
 
   def isTerm: Boolean = this match {
     case symbol: TypeSymbol => false
-    case symbol: VariableSymbol => true
+    case _: VariableSymbol | _: FunctionSymbol => true
+    case _: symbols.TranslationUnit => ???
   }
 }
 
@@ -54,15 +55,17 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
   val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
 }
 
-class VariableSymbol(override val name: String, outerScope: Scope, val semanticType: SemanticType, val initExpr: Option[Expr]) extends Symbol(name, outerScope) {
+class VariableSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
   var isStatic: Boolean = false
+  val semanticType: SemanticType = GlobalScope.NothingType
+  val initExpr: Option[Expr] = None
 }
 
-class VisibleVariableSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VariableSymbol(name, outerScope, semanticType, initExpr) {
+class VisibleVariableSymbol(override val name: String, outerScope: Scope) extends VariableSymbol(name, outerScope) {
   var visibility: Visibility = Visibility.default
 }
 
-class FieldSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VisibleVariableSymbol(name, outerScope, semanticType, initExpr), Modal {
+class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleVariableSymbol(name, outerScope), Modal {
   var isAnOverride: Boolean = false
 }
 
