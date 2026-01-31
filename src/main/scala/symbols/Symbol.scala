@@ -75,7 +75,7 @@ class MethodSymbol(override val name: String, outerScope: Scope) extends Functio
 }
 
 class TranslationUnit(override val name: String, outerScopes: List[Scope]) extends Symbol(name, outerScopes) {
-  val classes: List[ClassSymbol] = List.empty
-  val functions: List[FunctionSymbol] = List.empty
-  val variables: List[VisibleVariableSymbol] = List.empty
+  val classes: ListBuffer[ClassSymbol] = ListBuffer.empty
+  val functions: ListBuffer[FunctionSymbol] = ListBuffer.empty
+  val variables: ListBuffer[VisibleVariableSymbol] = ListBuffer.empty
 }
