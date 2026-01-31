@@ -32,9 +32,9 @@ class TypeParameterSymbol(override val name: String, outerScope: Scope, variance
 class SemanticType(val typeSymbol: TypeSymbol, val genericArguments: List[SemanticType])
 
 class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
-  val isAbstract: Boolean = false
-  val isOpen: Boolean = false
-  val visibility: Visibility = Visibility.default
+  var isAbstract: Boolean = false
+  var isOpen: Boolean = false
+  var visibility: Visibility = Visibility.default
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
   val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
@@ -43,35 +43,35 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
 }
 
 class VariableSymbol(override val name: String, outerScope: Scope, val semanticType: SemanticType, val initExpr: Option[Expr]) extends Symbol(name, outerScope) {
-  val isStatic: Boolean = false
+  var isStatic: Boolean = false
 }
 
 class VisibleVariableSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VariableSymbol(name, outerScope, semanticType, initExpr) {
-  val visibility: Visibility = Visibility.default
+  var visibility: Visibility = Visibility.default
 }
 
 class FieldSymbol(override val name: String, outerScope: Scope, override val semanticType: SemanticType, override val initExpr: Option[Expr]) extends VisibleVariableSymbol(name, outerScope, semanticType, initExpr) {
-  val isAbstract: Boolean = false
-  val isOpen: Boolean = false
-  val isAnOverride: Boolean = false
+  var isAbstract: Boolean = false
+  var isOpen: Boolean = false
+  var isAnOverride: Boolean = false
 }
 
 class FunctionSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
-  val isStatic: Boolean = false
-  val visibility: Visibility = Visibility.default
+  var isStatic: Boolean = false
+  var visibility: Visibility = Visibility.default
 
-  val block: BlockStmt = BlockStmt(List.empty)
+  var block: BlockStmt = BlockStmt(List.empty)
 
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty
 
-  val returnType: SemanticType = GlobalScope.NothingType
+  var returnType: SemanticType = GlobalScope.NothingType
 }
 
 class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope) {
-  val isAbstract: Boolean = false
-  val isOpen: Boolean = false
-  val isAnOverride: Boolean = false
+  var isAbstract: Boolean = false
+  var isOpen: Boolean = false
+  var isAnOverride: Boolean = false
 }
 
 class TranslationUnit(override val name: String, outerScopes: List[Scope]) extends Symbol(name, outerScopes) {
