@@ -2,8 +2,7 @@ package parser
 
 import diagnostics.Diagnostic
 import Parsel.*
-import ast.StringLiteral
-import diagnostics.Diagnostic.UnrecognisedToken
+import diagnostics.Diagnostic.{UnrecognisedToken, UnterminatedStringLiteral}
 import parser.Token.*
 import sources.SourceRange
 
@@ -375,7 +374,7 @@ object Tokeniser {
     )
   }
 
-  // ===== Tokenize entire input =====
+  // ===== Tokenise entire input =====
 
   private def tokeniser(using fileId: Int): Parsel[List[Token], Char, Diagnostic] = {
     given SafePointFunction[Char] = _ => false
@@ -401,7 +400,7 @@ object Tokeniser {
       TreeMap.from(exactTokens.groupBy(_._1.length))(using Ordering[Int].reverse)
   }
 
-  val config = TokeniserConfig(
+  private val config = TokeniserConfig(
     List(' ', '\t', '\r', '\n', '\f'),
     Map(
       "<<=" -> Token.LeftShiftEquals.apply,
@@ -489,92 +488,125 @@ object Tokeniser {
       if (tokeniserConfig.delimiterSet.contains(string(idx))) {
         idx += 1
       } else {
-        // Try to match exact tokens (longest first)
-        var matched = false
-        val iter = exactTokens.iterator
-        while (iter.hasNext && !matched) {
-          val (length, tokCandidates) = iter.next()
-          if (startIdx + length <= string.length) {
-            tokCandidates.get(string.slice(startIdx, startIdx + length)) match {
-              case Some(rangeToToken) =>
-                tokens += rangeToToken(SourceRange(fileId, startIdx, length))
-                idx = startIdx + length
-                matched = true
-              case None =>
-            }
+        // Check for comments first (before exact token matching)
+        var isComment = false
+        if (string(startIdx) == '/' && startIdx + 1 < string.length) {
+          string(startIdx + 1) match {
+            case '/' =>
+              // Single-line comment: skip until newline or end of string
+              idx = startIdx + 2
+              while (idx < string.length && string(idx) != '\n') {
+                idx += 1
+              }
+              isComment = true
+
+            case '*' =>
+              // Multi-line comment: skip until */ or end of string
+              idx = startIdx + 2
+              var foundEnd = false
+              while (idx < string.length && !foundEnd) {
+                if (string(idx) == '*' && idx + 1 < string.length && string(idx + 1) == '/') {
+                  idx += 2
+                  foundEnd = true
+                } else {
+                  idx += 1
+                }
+              }
+              isComment = true
+
+            case _ =>
+              // Not a comment, continue to token matching
           }
         }
 
-        // If no exact token matched, try other token types
-        if (!matched) {
-          string(startIdx) match {
-            case '\"' =>
-              // Parse string literal
-              idx = startIdx + 1
-              val sb = new StringBuilder
-              while (idx < string.length && string(idx) != '\"') {
-                sb.append(string(idx))
-                idx += 1
+        if (!isComment) {
+          // Try to match exact tokens (longest first)
+          var matched = false
+          val iter = exactTokens.iterator
+          while (iter.hasNext && !matched) {
+            val (length, tokCandidates) = iter.next()
+            if (startIdx + length <= string.length) {
+              tokCandidates.get(string.slice(startIdx, startIdx + length)) match {
+                case Some(rangeToToken) =>
+                  tokens += rangeToToken(SourceRange(fileId, startIdx, length))
+                  idx = startIdx + length
+                  matched = true
+                case None =>
               }
-              if (idx < string.length) {
-                idx += 1 // Skip closing quote
-                tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
-              } else {
-                // Unclosed string literal - still add it with what we have
-                tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
-              }
+            }
+          }
 
-            case '\'' =>
-              // Parse char literal
-              idx = startIdx + 1
-              if (idx < string.length) {
-                val ch = string(idx)
-                idx += 1
-                if (idx < string.length && string(idx) == '\'') {
+          // If no exact token matched, try other token types
+          if (!matched) {
+            string(startIdx) match {
+              case '\"' =>
+                // Parse string literal
+                idx = startIdx + 1
+                val sb = new StringBuilder
+                while (idx < string.length && string(idx) != '\"') {
+                  sb.append(string(idx))
                   idx += 1
-                  tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
-                } else {
-                  // Unclosed char literal
-                  tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
                 }
-              } else {
-                // Empty char literal
-                diagnostics += UnrecognisedToken("'", SourceRange(fileId, startIdx, 1))
-              }
+                if (idx < string.length) {
+                  idx += 1 // Skip closing quote
+                  tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
+                } else {
+                  // Unclosed string literal - still add it with what we have
+                  tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
+                  diagnostics += UnterminatedStringLiteral(SourceRange(fileId, startIdx))
+                }
 
-            case c if c.isDigit =>
-              // Parse number literal
-              while (idx < string.length && string(idx).isDigit) {
-                idx += 1
-              }
-              // Check for float (digit after dot required)
-              if (idx < string.length && string(idx) == '.' && idx + 1 < string.length && string(idx + 1).isDigit) {
-                idx += 1 // Skip dot
+              case '\'' =>
+                // Parse char literal
+                idx = startIdx + 1
+                if (idx < string.length) {
+                  val ch = string(idx)
+                  idx += 1
+                  if (idx < string.length && string(idx) == '\'') {
+                    idx += 1
+                    tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
+                  } else {
+                    // Unclosed char literal
+                    tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
+                  }
+                } else {
+                  // Empty char literal
+                  diagnostics += UnrecognisedToken("'", SourceRange(fileId, startIdx, 1))
+                }
+
+              case c if c.isDigit =>
+                // Parse number literal
                 while (idx < string.length && string(idx).isDigit) {
                   idx += 1
                 }
-                val value = string.slice(startIdx, idx).toFloat
-                tokens += Token.FloatLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
-              } else {
-                val value = string.slice(startIdx, idx).toInt
-                tokens += Token.IntegerLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
-              }
+                // Check for float (digit after dot required)
+                if (idx < string.length && string(idx) == '.' && idx + 1 < string.length && string(idx + 1).isDigit) {
+                  idx += 1 // Skip dot
+                  while (idx < string.length && string(idx).isDigit) {
+                    idx += 1
+                  }
+                  val value: Float = string.slice(startIdx, idx).toFloat
+                  tokens += Token.FloatLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
+                } else {
+                  val value: Int = string.slice(startIdx, idx).toInt
+                  tokens += Token.IntegerLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
+                }
 
-            case c if c.isLetter || c == '_' =>
-              // Parse identifier or keyword
-              while (idx < string.length && (string(idx).isLetterOrDigit || string(idx) == '_')) {
+              case c if c.isLetter || c == '_' =>
+                // Parse identifier or keyword
+                while (idx < string.length && (string(idx).isLetterOrDigit || string(idx) == '_')) {
+                  idx += 1
+                }
+                val text = string.slice(startIdx, idx)
+                tokens += (tokeniserConfig.keywords.get(text) match {
+                  case Some(keywordConstructor) => keywordConstructor(SourceRange(fileId, startIdx, idx - startIdx))
+                  case None => Token.Identifier(text, SourceRange(fileId, startIdx, idx - startIdx))
+                })
+
+              case c =>
+                diagnostics += UnrecognisedToken(c.toString, SourceRange(fileId, startIdx))
                 idx += 1
-              }
-              val text = string.slice(startIdx, idx)
-              val token = tokeniserConfig.keywords.get(text) match {
-                case Some(keywordConstructor) => keywordConstructor(SourceRange(fileId, startIdx, idx - startIdx))
-                case None => Token.Identifier(text, SourceRange(fileId, startIdx, idx - startIdx))
-              }
-              tokens += token
-
-            case c =>
-              diagnostics += UnrecognisedToken(c.toString, SourceRange(fileId, startIdx, 1))
-              idx += 1
+            }
           }
         }
       }
