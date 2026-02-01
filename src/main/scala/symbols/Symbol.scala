@@ -26,11 +26,11 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
   }
 }
 
-class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
+sealed abstract class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
+
+sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
 class TypeParameterSymbol(override val name: String, outerScope: Scope, variance: Variance = INVARIANT) extends TypeSymbol(name, outerScope)
-
-class SemanticType(val typeSymbol: TypeSymbol, val genericArguments: List[SemanticType])
 
 sealed trait Modal {
   var isAbstract: Boolean = false
@@ -55,9 +55,9 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
   val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
 }
 
-class VariableSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
+class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
   var isStatic: Boolean = false
-  val semanticType: SemanticType = GlobalScope.NothingType
+  val semanticType: SemanticType = GlobalScope.ErrorType
   val initExpr: Option[Expr] = None
 }
 
@@ -69,7 +69,7 @@ class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleV
   var isAnOverride: Boolean = false
 }
 
-class FunctionSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
+class FunctionSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
   var isStatic: Boolean = false
   var visibility: Visibility = Visibility.default
 
@@ -78,7 +78,7 @@ class FunctionSymbol(override val name: String, outerScope: Scope) extends Symbo
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty
 
-  var returnType: SemanticType = GlobalScope.NothingType
+  var returnType: SemanticType = GlobalScope.ErrorType
 }
 
 class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope), Modal {
@@ -92,7 +92,10 @@ class TranslationUnit(override val name: String, outerScopes: List[Scope]) exten
   val typedefs: ListBuffer[TypedefSymbol] = ListBuffer.empty
 }
 
-class TypedefSymbol(override val name: String, val referredType: TypeRef, outerScope: Scope) extends Symbol(name, outerScope) {
+class TypedefSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
+  val referredType: SemanticType = GlobalScope.ErrorType
   var visibility: Visibility = Visibility.default
 }
+
+case class SemanticType(typeSymbol: TypeSymbol, genericArguments: List[SemanticType] = List.empty)
