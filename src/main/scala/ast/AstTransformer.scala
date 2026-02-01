@@ -1,6 +1,6 @@
-package symbols
+package ast
 
-import ast.{AstNode, ClassDecl, Decl, Expr, FunctionDecl, KahwaFile, ModifierNode, Stmt, TypeParameterDecl, TypeRef, TypedefDecl, VariableDecl}
+import ast.*
 
 class AstTransformer {
   def transform(expr: Expr): Expr = expr
