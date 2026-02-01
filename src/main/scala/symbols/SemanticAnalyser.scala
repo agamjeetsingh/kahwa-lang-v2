@@ -1,10 +1,11 @@
 package symbols
 
 import ast.Modifier.{FINAL, OVERRIDE, PRIVATE, PROTECTED, PUBLIC, STATIC}
-import ast.{AstNode, ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
+import ast.{AstNode, AstTransformer, ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TraversingVisitor, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{CannotResolveSymbol, IllegalModifierCombination, IncorrectNumberOfGenericArguments, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared, TypedefCycleDetected}
 import sources.SourceRange
+import symbols.AstSymbolExtensions.*
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -12,16 +13,28 @@ import scala.collection.mutable.ListBuffer
 object SemanticAnalyser {
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
-    given mutable.Map[Symbol, AstNode] = mutable.Map()
+    given nodeToSymbol: mutable.Map[AstNode, Symbol] = mutable.Map()
     given diagnostics: ListBuffer[Diagnostic] = ListBuffer()
     val res = DeclareNames.declareFile(kahwaFile)
+
+    diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
+
 //    kahwaFile = TypedefReplacer(res.typedefs.toList).transform(kahwaFile)
+
+    diagnostics ++= PartialTypeResolver.TypeResolver(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
 
     (res, diagnostics.toList)
   }
 
+  extension [T](symbolAndDiagnostics: (T, Iterable[Diagnostic])) {
+    private def ~>(sink: ListBuffer[Diagnostic]): T = {
+      sink ++= symbolAndDiagnostics._2
+      symbolAndDiagnostics._1
+    }
+  }
+
   private object DeclareNames {
-    def declareFile(kahwaFile: KahwaFile)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): TranslationUnit = {
+    def declareFile(kahwaFile: KahwaFile)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): TranslationUnit = {
       val translationUnit = TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
 
       registerType(
@@ -61,7 +74,7 @@ object SemanticAnalyser {
                                                  declToSymbolAndRange: T => (U, SourceRange),
                                                  registerSymbol: U => Unit,
                                                  duplicatesAllowed: Boolean, term: Boolean)
-                                                (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
+                                                (using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
       val ts = decls.map(decl => (declToSymbolAndRange(decl), decl))
 
       ts.flatMap(tuple => {
@@ -71,7 +84,7 @@ object SemanticAnalyser {
         } else {
           parentSymbol.scope.define(childSymbol)
           registerSymbol(childSymbol)
-          symbolToNode += childSymbol -> decl
+          nodeToSymbol += decl -> childSymbol
           List.empty
         }
       })
@@ -82,7 +95,7 @@ object SemanticAnalyser {
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
                                                      duplicatesAllowed: Boolean = false)
-                                                    (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
+                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
       register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
     }
 
@@ -91,18 +104,11 @@ object SemanticAnalyser {
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
                                                      duplicatesAllowed: Boolean = false)
-                                                    (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
+                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
       register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
     }
 
-    extension [T](symbolAndDiagnostics: (T, Iterable[Diagnostic])) {
-      private def ~>(sink: ListBuffer[Diagnostic]): T = {
-        sink ++= symbolAndDiagnostics._2
-        symbolAndDiagnostics._1
-      }
-    }
-
-    private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): ClassSymbol = {
+    private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): ClassSymbol = {
       val classSymbol = ClassSymbol(classDecl.name, outerScope)
       
       registerType(
@@ -143,7 +149,7 @@ object SemanticAnalyser {
       classSymbol
     }
 
-    private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): FunctionSymbol = {
+    private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): FunctionSymbol = {
       val functionSymbol = FunctionSymbol(functionDecl.name, outerScope)
 
       registerType(
@@ -168,7 +174,7 @@ object SemanticAnalyser {
       functionSymbol
     }
 
-    private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): TypedefSymbol = {
+    private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): TypedefSymbol = {
       val typedefSymbol = TypedefSymbol(typedefDecl.name, outerScope)
 
       registerType(
@@ -184,7 +190,7 @@ object SemanticAnalyser {
       typedefSymbol
     }
 
-    private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): MethodSymbol = {
+    private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): MethodSymbol = {
       val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
 
       registerType(
@@ -352,6 +358,145 @@ object SemanticAnalyser {
         }
       })
       found
+    }
+  }
+
+  private object PartialTypeResolver {
+    class TypeResolver(val nodeToSymbol: Map[AstNode, Symbol]) extends TraversingVisitor[ListBuffer[Diagnostic]] {
+      given Map[AstNode, Symbol] = nodeToSymbol
+      override protected def defaultResult: ListBuffer[Diagnostic] = ListBuffer()
+
+      override protected def combine(r1: ListBuffer[Diagnostic], r2: ListBuffer[Diagnostic]): ListBuffer[Diagnostic] = r1 ++ r2
+
+      override def visitKahwaFile(node: KahwaFile): ListBuffer[Diagnostic] = {
+        withScope(node) {
+          super.visitKahwaFile(node)
+        }
+      }
+
+      override def visitTypedefDecl(node: TypedefDecl): ListBuffer[Diagnostic] = {
+        val (semanticType, diagnostics) = resolveAndRecurse(node.referredType, super.visitTypedefDecl)(node)
+        node.symbol.referredType = semanticType
+        diagnostics
+      }
+
+      override def visitClassDecl(node: ClassDecl): ListBuffer[Diagnostic] = {
+        resolveAndRecurse(node.symbol.superClasses, node.superClasses, super.visitClassDecl)(node)
+      }
+
+      override def visitFunctionDecl(node: FunctionDecl): ListBuffer[Diagnostic] = {
+        val (semanticType, diagnostics) = resolveAndRecurse(node.returnType, super.visitFunctionDecl)(node)
+        node.symbol.returnType = semanticType
+        diagnostics
+      }
+
+      override def visitVariableDecl(node: VariableDecl): ListBuffer[Diagnostic] = {
+        val (semanticType, diagnostics) = resolveAndRecurse(node.typeRef, super.visitVariableDecl)(node)
+        node.symbol.semanticType = semanticType
+        diagnostics
+      }
+
+      private def resolveAndRecurse[T <: AstNode](semanticTypes: ListBuffer[SemanticType], typeRefs: List[TypeRef], recursiveVisitor: T => ListBuffer[Diagnostic])(node: T) = {
+        val diagnostics = ListBuffer[Diagnostic]()
+        semanticTypes ++= typeRefs.map(resolveType(_, stack.top) ~> diagnostics)
+
+        withScope(node) {
+          diagnostics ++ recursiveVisitor(node)
+        }
+      }
+
+      private def resolveAndRecurse[T <: AstNode](typeRef: TypeRef, recursiveVisitor: T => ListBuffer[Diagnostic])(node: T): (SemanticType, ListBuffer[Diagnostic]) = {
+        val diagnostics = ListBuffer[Diagnostic]()
+        val res = resolveType(typeRef, stack.top) ~> diagnostics
+
+        withScope(node) {
+          (res, diagnostics ++ recursiveVisitor(node))
+        }
+      }
+
+      private def withScope[R](astNode: AstNode)(body: => R): R = {
+        stack.push(astNode.symbolScope)
+        try {
+          body
+        } finally {
+          stack.pop()
+        }
+      }
+
+      private val stack: mutable.Stack[Scope] = mutable.Stack()
+    }
+
+    private def resolveType(typeRef: TypeRef, scope: Scope): (SemanticType, ListBuffer[Diagnostic]) = {
+      val symbols = scope.searchForType(typeRef.name.name)
+      val diagnostics: ListBuffer[Diagnostic] = ListBuffer()
+      symbols.find {
+        case _: TypeSymbol => true
+        case _ => false
+      } match {
+        case Some(symbol) => {
+          val expectedArgs = symbol match {
+            case classSymbol: ClassSymbol => classSymbol.genericArguments.size
+            case _ => 0
+          }
+
+          if (expectedArgs != typeRef.args.size) {
+            diagnostics += IncorrectNumberOfGenericArguments(expectedArgs, symbol.name, typeRef.args.size, typeRef.range)
+            (GlobalScope.ErrorType, diagnostics)
+          } else {
+            // TODO - Get rid of variance from typeRef
+            val genericArguments = typeRef.args.map((typeRef, _) => resolveType(typeRef, scope) ~> diagnostics)
+
+            if (genericArguments.contains(GlobalScope.ErrorType)) {
+              (GlobalScope.ErrorType, diagnostics)
+            } else {
+              (SemanticType(symbol, genericArguments), diagnostics)
+            }
+          }
+        }
+        case None => {
+          diagnostics += CannotResolveSymbol(typeRef.name.name, typeRef.range)
+          (GlobalScope.ErrorType, diagnostics)
+        }
+      }
+    }
+  }
+
+  private object TypedefCycleDetector {
+    def detectCycles(allTypedefs: List[TypedefDecl])(using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
+      val visited = mutable.Set[String]()
+      val visiting = mutable.Set[String]()
+      val diagnostics = ListBuffer[Diagnostic]()
+
+      def dfs(typedefName: String, path: List[String]): Unit = {
+        if (visiting.contains(typedefName)) {
+          diagnostics += TypedefCycleDetected(path.reverse, SourceRange.dummy) // TODO - Source range
+          return
+        }
+        if (visited.contains(typedefName)) return
+
+        visiting += typedefName
+        // Get all typedef dependencies
+        for (dep <- getTypedefDependencies(typedefName, allTypedefs)) {
+          dfs(dep, typedefName :: path)
+        }
+        visiting -= typedefName
+        visited += typedefName
+      }
+
+      allTypedefs.foreach(td => dfs(td.name, List(td.name)))
+      diagnostics.toList
+    }
+
+    private def getTypedefDependencies(name: String, allTypedefs: List[TypedefDecl])(using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[String] = {
+      allTypedefs.collect {
+        case typedefDecl if nodeToSymbol.contains(typedefDecl) => typedefDecl
+      }.find(_.name == name) match {
+        case Some(typedefDecl) => {
+          val typeRef = typedefDecl.referredType
+          typeRef.name.name :: typeRef.args.map(_._1.name.name)
+        }
+        case None => List.empty
+      }
     }
   }
 

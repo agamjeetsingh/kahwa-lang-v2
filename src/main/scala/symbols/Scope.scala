@@ -31,9 +31,9 @@ class Scope {
 
   def define(symbol: Symbol): Unit = {
     symbol match {
-      case symbol: TypeSymbol => typeSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
-      case symbol: TermSymbol => termSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
-      case unit: TranslationUnit => ???
+      case symbol: TypeSymbol => typeSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
+      case symbol: TermSymbol => termSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
+      case _ => ???
     }
   }
 
