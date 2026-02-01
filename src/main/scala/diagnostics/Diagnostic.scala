@@ -17,4 +17,10 @@ enum Diagnostic(val msg: String, val range: SourceRange) {
   case RepeatedModifier(modifier: Modifier, override val range: SourceRange) extends Diagnostic(s"Repeated modifier '${modifier.prettyPrint}'", range)
   
   case ModifierNotAllowed(modifier: Modifier, override val range: SourceRange) extends Diagnostic(s"Modifier '${modifier.prettyPrint}' not allowed here", range)
+  
+  case TypedefCycleDetected(cycleMembers: List[String], override val range: SourceRange) extends Diagnostic(s"Cycle detected in typedefs: ${cycleMembers.mkString(" -> ")}", range)
+  
+  case CannotResolveSymbol(symbol: String, override val range: SourceRange) extends Diagnostic(s"Cannot resolve symbol '$symbol'", range)
+  
+  case IncorrectNumberOfGenericArguments(expected: Int, symbol: String, found: Int, override val range: SourceRange) extends Diagnostic(s"$expected type parameters expected for $symbol but found $found", range)
 }

@@ -1,9 +1,9 @@
 package symbols
 
 import ast.Modifier.{FINAL, OVERRIDE, PRIVATE, PROTECTED, PUBLIC, STATIC}
-import ast.{ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
+import ast.{AstNode, ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
 import diagnostics.Diagnostic
-import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared, TypedefCycleDetected}
+import diagnostics.Diagnostic.{CannotResolveSymbol, IllegalModifierCombination, IncorrectNumberOfGenericArguments, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared, TypedefCycleDetected}
 import sources.SourceRange
 
 import scala.collection.mutable
@@ -12,19 +12,56 @@ import scala.collection.mutable.ListBuffer
 object SemanticAnalyser {
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
+    given mutable.Map[Symbol, AstNode] = mutable.Map()
+    given diagnostics: ListBuffer[Diagnostic] = ListBuffer()
     val res = DeclareNames.declareFile(kahwaFile)
+//    kahwaFile = TypedefReplacer(res.typedefs.toList).transform(kahwaFile)
 
-    kahwaFile = TypedefReplacer.replaceTypedefs(kahwaFile)
-
-    res
+    (res, diagnostics.toList)
   }
 
   private object DeclareNames {
+    def declareFile(kahwaFile: KahwaFile)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): TranslationUnit = {
+      val translationUnit = TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
+
+      registerType(
+        translationUnit,
+        kahwaFile.classDecls,
+        classDecl => (declareClass(classDecl, translationUnit.scope, true), SourceRange.dummy),
+        translationUnit.classes += _
+      )
+
+      registerTerm(
+        translationUnit,
+        kahwaFile.functionDecls,
+        functionDecl => (declareFunction(functionDecl, translationUnit.scope), SourceRange.dummy),
+        translationUnit.functions += _,
+        duplicatesAllowed = true
+      )
+
+      registerType(
+        translationUnit,
+        kahwaFile.variableDecls,
+        variableDecl => (declareVisibleVariable(variableDecl, translationUnit.scope), SourceRange.dummy),
+        translationUnit.variables += _
+      )
+
+      registerType(
+        translationUnit,
+        kahwaFile.typedefDecls,
+        typedefDecl => (declareTypedef(typedefDecl, translationUnit.scope), SourceRange.dummy),
+        translationUnit.typedefs += _
+      )
+
+      translationUnit
+    }
+
     private def register[T <: Decl, U <: Symbol](parentSymbol: Symbol,
                                                  decls: List[T],
                                                  declToSymbolAndRange: T => (U, SourceRange),
                                                  registerSymbol: U => Unit,
-                                                 duplicatesAllowed: Boolean, term: Boolean): List[Diagnostic] = {
+                                                 duplicatesAllowed: Boolean, term: Boolean)
+                                                (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
       val ts = decls.map(decl => (declToSymbolAndRange(decl), decl))
 
       ts.flatMap(tuple => {
@@ -34,6 +71,7 @@ object SemanticAnalyser {
         } else {
           parentSymbol.scope.define(childSymbol)
           registerSymbol(childSymbol)
+          symbolToNode += childSymbol -> decl
           List.empty
         }
       })
@@ -43,7 +81,8 @@ object SemanticAnalyser {
                                                      decls: List[T],
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
-                                                     duplicatesAllowed: Boolean = false): List[Diagnostic] = {
+                                                     duplicatesAllowed: Boolean = false)
+                                                    (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
       register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
     }
 
@@ -51,7 +90,8 @@ object SemanticAnalyser {
                                                      decls: List[T],
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
-                                                     duplicatesAllowed: Boolean = false): List[Diagnostic] = {
+                                                     duplicatesAllowed: Boolean = false)
+                                                    (using symbolToNode: mutable.Map[Symbol, AstNode]): List[Diagnostic] = {
       register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
     }
 
@@ -62,46 +102,9 @@ object SemanticAnalyser {
       }
     }
 
-    def declareFile(kahwaFile: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
-      val translationUnit = TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
-      val diagnostics = ListBuffer[Diagnostic]()
-
-      registerType(
-        translationUnit,
-        kahwaFile.classDecls,
-        classDecl => (declareClass(classDecl, translationUnit.scope, true) ~> diagnostics, SourceRange.dummy),
-        translationUnit.classes += _
-      )
-
-      registerTerm(
-        translationUnit,
-        kahwaFile.functionDecls,
-        functionDecl => (declareFunction(functionDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
-        translationUnit.functions += _,
-        duplicatesAllowed = true
-      )
-
-      registerType(
-        translationUnit,
-        kahwaFile.variableDecls,
-        variableDecl => (declareVisibleVariable(variableDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
-        translationUnit.variables += _
-      )
-
-      registerType(
-        translationUnit,
-        kahwaFile.typedefDecls,
-        typedefDecl => (declareTypedef(typedefDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
-        translationUnit.typedefs += _
-      )
-
-      (translationUnit, diagnostics.toList)
-    }
-
-    private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean): (ClassSymbol, List[Diagnostic]) = {
+    private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): ClassSymbol = {
       val classSymbol = ClassSymbol(classDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
-
+      
       registerType(
         classSymbol,
         classDecl.typeParameters,
@@ -112,14 +115,14 @@ object SemanticAnalyser {
       registerType(
         classSymbol,
         classDecl.nestedClasses,
-        nestedClassDecl => (declareClass(nestedClassDecl, classSymbol.scope, false) ~> diagnostics, classDecl.range),
+        nestedClassDecl => (declareClass(nestedClassDecl, classSymbol.scope, false), classDecl.range),
         classSymbol.nestedClasses += _
       )
 
       registerTerm(
         classSymbol,
         classDecl.methods,
-        methodDecl => (declareMethod(methodDecl, classSymbol.scope) ~> diagnostics, methodDecl.range),
+        methodDecl => (declareMethod(methodDecl, classSymbol.scope), methodDecl.range),
         classSymbol.methods += _,
         duplicatesAllowed = true
       )
@@ -127,22 +130,21 @@ object SemanticAnalyser {
       registerTerm(
         classSymbol,
         classDecl.fields,
-        variableDecl => (declareField(variableDecl, classSymbol.scope) ~> diagnostics, variableDecl.range),
+        variableDecl => (declareField(variableDecl, classSymbol.scope), variableDecl.range),
         classSymbol.fields += _
       )
 
-      classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel) ~> diagnostics
+      classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel)
 
-      diagnostics ++= modifierNotAllowed(classDecl.modifiers, Set(Modifier.STATIC, Modifier.OVERRIDE).contains)
+      modifierNotAllowed(classDecl.modifiers, Set(Modifier.STATIC, Modifier.OVERRIDE).contains)
 
-      classSymbol.setModality(resolveModality(classDecl.modifiers) ~> diagnostics)
+      classSymbol.setModality(resolveModality(classDecl.modifiers))
 
-      (classSymbol, diagnostics.toList)
+      classSymbol
     }
 
-    private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope): (FunctionSymbol, List[Diagnostic]) = {
+    private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): FunctionSymbol = {
       val functionSymbol = FunctionSymbol(functionDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
 
       registerType(
         functionSymbol,
@@ -154,21 +156,20 @@ object SemanticAnalyser {
       registerTerm(
         functionSymbol,
         functionDecl.parameters,
-        variableDecl => (declareVariable(variableDecl, functionSymbol.scope) ~> diagnostics, variableDecl.range),
+        variableDecl => (declareVariable(variableDecl, functionSymbol.scope), variableDecl.range),
         functionSymbol.parameters += _
       )
 
-      functionSymbol.visibility = resolveVisibility(functionDecl.modifiers, true) ~> diagnostics
-      functionSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      functionSymbol.visibility = resolveVisibility(functionDecl.modifiers, true)
+      functionSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC)
 
-      diagnostics ++= modifierNotAllowed(functionDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
+      modifierNotAllowed(functionDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
 
-      (functionSymbol, diagnostics.toList)
+      functionSymbol
     }
 
-    private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope): (TypedefSymbol, List[Diagnostic]) = {
-      val typedefSymbol = TypedefSymbol(typedefDecl.name, typedefDecl.referredType, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
+    private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): TypedefSymbol = {
+      val typedefSymbol = TypedefSymbol(typedefDecl.name, outerScope)
 
       registerType(
         typedefSymbol,
@@ -177,15 +178,14 @@ object SemanticAnalyser {
         typedefSymbol.genericArguments += _
       )
 
-      typedefSymbol.visibility = resolveVisibility(typedefDecl.modifiers, true) ~> diagnostics
-      diagnostics ++= modifierNotAllowed(typedefDecl.modifiers, !_.isVisibility)
+      typedefSymbol.visibility = resolveVisibility(typedefDecl.modifiers, true)
+      modifierNotAllowed(typedefDecl.modifiers, !_.isVisibility)
 
-      (typedefSymbol, diagnostics.toList)
+      typedefSymbol
     }
 
-    private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): (MethodSymbol, List[Diagnostic]) = {
+    private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope)(using symbolToNode: mutable.Map[Symbol, AstNode], diagnostics: ListBuffer[Diagnostic]): MethodSymbol = {
       val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
 
       registerType(
         methodSymbol,
@@ -197,59 +197,54 @@ object SemanticAnalyser {
       registerTerm(
         methodSymbol,
         functionDecl.parameters,
-        variableDecl => (declareVariable(variableDecl, methodSymbol.scope) ~> diagnostics, variableDecl.range),
+        variableDecl => (declareVariable(variableDecl, methodSymbol.scope), variableDecl.range),
         methodSymbol.parameters += _
       )
 
-      methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false) ~> diagnostics
-      methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false)
+      methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC)
 
-      methodSymbol.setModality(resolveModality(functionDecl.modifiers) ~> diagnostics)
-      methodSymbol.isAnOverride = hasModifier(functionDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+      methodSymbol.setModality(resolveModality(functionDecl.modifiers))
+      methodSymbol.isAnOverride = hasModifier(functionDecl.modifiers, Modifier.OVERRIDE)
 
-      (methodSymbol, diagnostics.toList)
+      methodSymbol
     }
 
-    private def declareVariable(variableDecl: VariableDecl, outerScope: Scope): (VariableSymbol, List[Diagnostic]) = {
+    private def declareVariable(variableDecl: VariableDecl, outerScope: Scope)(using diagnostics: ListBuffer[Diagnostic]): VariableSymbol = {
       val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
 
-      variableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-      diagnostics ++= modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
+      variableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC)
+      modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
 
-      (variableSymbol, diagnostics.toList)
+      variableSymbol
     }
 
-    private def declareVisibleVariable(variableDecl: VariableDecl, outerScope: Scope): (VisibleVariableSymbol, List[Diagnostic]) = {
+    private def declareVisibleVariable(variableDecl: VariableDecl, outerScope: Scope)(using diagnostics: ListBuffer[Diagnostic]): VisibleVariableSymbol = {
       val visibleVariableSymbol = VisibleVariableSymbol(variableDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
 
-      visibleVariableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-      visibleVariableSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
+      visibleVariableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC)
+      visibleVariableSymbol.visibility = resolveVisibility(variableDecl.modifiers, true)
 
-      diagnostics ++= modifierNotAllowed(variableDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
+      modifierNotAllowed(variableDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
 
-      (visibleVariableSymbol, diagnostics.toList)
+      visibleVariableSymbol
     }
 
-    private def declareField(variableDecl: VariableDecl, outerScope: Scope): (FieldSymbol, List[Diagnostic]) = {
+    private def declareField(variableDecl: VariableDecl, outerScope: Scope)(using diagnostics: ListBuffer[Diagnostic]): FieldSymbol = {
       val fieldSymbol = FieldSymbol(variableDecl.name, outerScope)
-      val diagnostics = ListBuffer[Diagnostic]()
 
-      fieldSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-      fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
+      fieldSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC)
+      fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true)
 
-      fieldSymbol.setModality(resolveModality(variableDecl.modifiers) ~> diagnostics)
-      fieldSymbol.isAnOverride = hasModifier(variableDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+      fieldSymbol.setModality(resolveModality(variableDecl.modifiers))
+      fieldSymbol.isAnOverride = hasModifier(variableDecl.modifiers, Modifier.OVERRIDE)
 
-      (fieldSymbol, diagnostics.toList)
+      fieldSymbol
     }
 
-    private def resolveVisibility(allModifiers: List[ModifierNode], topLevel: Boolean): (Visibility, List[Diagnostic]) = {
+    private def resolveVisibility(allModifiers: List[ModifierNode], topLevel: Boolean)(using diagnostics: ListBuffer[Diagnostic]): Visibility = {
       val modifiers = allModifiers.filter(_.modifier.isVisibility)
-
-      val diagnostics = ListBuffer[Diagnostic]()
-
+      
       val res = if (modifiers.isEmpty) {
         Visibility.PUBLIC
       } else if (modifiers.size == 1) {
@@ -296,20 +291,18 @@ object SemanticAnalyser {
         case _ => throw IllegalStateException("Should be unreachable")
       })
 
-      (res, diagnostics.toList)
+      res
     }
 
-    private def modifierNotAllowed(modifiers: List[ModifierNode], notAllowed: Modifier => Boolean): List[Diagnostic] = {
-      modifiers.collect(modifierNode => modifierNode.modifier match {
+    private def modifierNotAllowed(modifiers: List[ModifierNode], notAllowed: Modifier => Boolean)(using diagnostics: ListBuffer[Diagnostic]): Unit = {
+      diagnostics ++= modifiers.collect(modifierNode => modifierNode.modifier match {
         case modifier if notAllowed(modifier) => ModifierNotAllowed(modifier, modifierNode.range)
       })
     }
 
-    private def resolveModality(allModifiers: List[ModifierNode]): (Modifier, List[Diagnostic]) = {
+    private def resolveModality(allModifiers: List[ModifierNode])(using diagnostics: ListBuffer[Diagnostic]): Modifier = {
       val modifiers = allModifiers.filter(_.modifier.isModality)
-
-      val diagnostics = ListBuffer[Diagnostic]()
-
+      
       val res = if (modifiers.nonEmpty) {
         if (modifiers.exists(_.modifier == Modifier.ABSTRACT)) {
           Modifier.ABSTRACT
@@ -345,11 +338,10 @@ object SemanticAnalyser {
         case _ => throw IllegalStateException("Should be unreachable")
       })
 
-      (res, diagnostics.toList)
+      res
     }
 
-    private def hasModifier(modifiers: List[ModifierNode], desiredModifier: Modifier): (Boolean, List[Diagnostic]) = {
-      val diagnostics = ListBuffer[Diagnostic]()
+    private def hasModifier(modifiers: List[ModifierNode], desiredModifier: Modifier)(using diagnostics: ListBuffer[Diagnostic]): Boolean = {
       var found = false
       modifiers.foreach(modifierNode => {
         if (modifierNode.modifier == desiredModifier) {
@@ -359,7 +351,7 @@ object SemanticAnalyser {
           }
         }
       })
-      (found, diagnostics.toList)
+      found
     }
   }
 
@@ -374,17 +366,6 @@ object SemanticAnalyser {
           // Not a typedef, but still recurse into generic arguments
           super.transform(typeRef)
       }
-    }
-  }
-
-  private object TypedefReplacer {
-    def replaceTypedefs(kahwaFile: KahwaFile): KahwaFile = {
-      val typedefMap = kahwaFile.typedefDecls.map { typedef =>
-        typedef.name -> typedef.referredType
-      }.toMap
-
-      val replacer = TypedefReplacer(typedefMap)
-      replacer.transform(kahwaFile)
     }
   }
 }
