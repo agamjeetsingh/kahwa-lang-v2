@@ -87,8 +87,9 @@ object Parser {
   }
 
   lazy val parseTypedefDecl: SafePointFunc ?=> Parsel[TypedefDecl, Token, Diagnostic] = {
-    spanned((list(parseModifierNode) <~ parseTypedef) ~ commit((parseIdentifier <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { case ((modifierNodes, (identifier, typeRef)), range: SourceRange) =>
-      TypedefDecl(identifier.value, typeRef, modifierNodes, range)
+    spanned((list(parseModifierNode) <~ parseTypedef) ~ commit(parseIdentifier ~ (optional(parseGenericArguments) <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { tuple =>
+      val  ((modifierNodes, ((identifier, optionalGenericArgs), typeRef)), range) = tuple
+      TypedefDecl(identifier.value, optionalGenericArgs.getOrElse(List.empty), typeRef, modifierNodes, range)
     }
   }
 

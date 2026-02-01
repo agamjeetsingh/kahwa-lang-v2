@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockStmt, Expr, Modifier, Variance}
+import ast.{BlockStmt, Expr, Modifier, TypeRef, Variance}
 import ast.Variance.INVARIANT
 
 import scala.collection.mutable.ListBuffer
@@ -89,4 +89,10 @@ class TranslationUnit(override val name: String, outerScopes: List[Scope]) exten
   val classes: ListBuffer[ClassSymbol] = ListBuffer.empty
   val functions: ListBuffer[FunctionSymbol] = ListBuffer.empty
   val variables: ListBuffer[VisibleVariableSymbol] = ListBuffer.empty
+  val typedefs: ListBuffer[TypedefSymbol] = ListBuffer.empty
+}
+
+class TypedefSymbol(override val name: String, val referredType: TypeRef, outerScope: Scope) extends Symbol(name, outerScope) {
+  val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
+  var visibility: Visibility = Visibility.default
 }

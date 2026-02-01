@@ -284,11 +284,12 @@ extension (typeParameters: List[TypeParameterDecl]) {
   else ""
 }
 
-case class TypedefDecl(name: String, 
+case class TypedefDecl(name: String,
+                       typeParameters: List[TypeParameterDecl],
                        referredType: TypeRef, 
                        modifiers: List[ModifierNode] = List.empty,
                        range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint}typedef $name = ${referredType.prettyPrint};"
+  override def prettyPrint: String = s"${modifiers.prettyPrint}typedef $name${typeParameters.prettyPrint} = ${referredType.prettyPrint};"
 }
 
 case class VariableDecl(name: String, 
