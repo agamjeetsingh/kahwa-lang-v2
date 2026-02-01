@@ -1,7 +1,7 @@
 package symbols
 
 import ast.Modifier.{FINAL, OVERRIDE, PRIVATE, PROTECTED, PUBLIC, STATIC}
-import ast.{ClassDecl, Decl, FunctionDecl, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, VariableDecl}
+import ast.{ClassDecl, Decl, FunctionDecl, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared}
 import sources.SourceRange
@@ -9,327 +9,357 @@ import sources.SourceRange
 import scala.collection.mutable.ListBuffer
 
 object SemanticAnalyser {
-  def processFile(kahwaFile: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
-    val res = declareFile(kahwaFile)
+  def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
+    var kahwaFile = file
+    val res = DeclareNames.declareFile(kahwaFile)
+
+    kahwaFile = TypedefReplacer.replaceTypedefs(kahwaFile)
 
     res
   }
 
-  private def register[T <: Decl, U <: Symbol](parentSymbol: Symbol,
-                                               decls: List[T],
-                                               declToSymbolAndRange: T => (U, SourceRange),
-                                               registerSymbol: U => Unit,
-                                               duplicatesAllowed: Boolean, term: Boolean): List[Diagnostic] = {
-    val ts = decls.map(decl => (declToSymbolAndRange(decl), decl))
+  private object DeclareNames {
+    private def register[T <: Decl, U <: Symbol](parentSymbol: Symbol,
+                                                 decls: List[T],
+                                                 declToSymbolAndRange: T => (U, SourceRange),
+                                                 registerSymbol: U => Unit,
+                                                 duplicatesAllowed: Boolean, term: Boolean): List[Diagnostic] = {
+      val ts = decls.map(decl => (declToSymbolAndRange(decl), decl))
 
-    ts.flatMap(tuple => {
-      val ((childSymbol, range), decl) = tuple
-      if (!duplicatesAllowed && ((term && parentSymbol.scope.searchForTerm(childSymbol.name).nonEmpty) || (!term && parentSymbol.scope.searchForType(childSymbol.name).nonEmpty))) {
-        List(SymbolAlreadyDeclared(childSymbol.name, range))
-      } else {
-        parentSymbol.scope.define(childSymbol)
-        registerSymbol(childSymbol)
-        List.empty
-      }
-    })
-  }
-
-  private def registerTerm[T <: Decl, U <: Symbol](parentSymbol: Symbol,
-                          decls: List[T],
-                          declToSymbolAndRange: T => (U, SourceRange),
-                          registerSymbol: U => Unit,
-                          duplicatesAllowed: Boolean = false): List[Diagnostic] = {
-    register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
-  }
-
-  private def registerType[T <: Decl, U <: Symbol](parentSymbol: Symbol,
-                                                   decls: List[T],
-                                                   declToSymbolAndRange: T => (U, SourceRange),
-                                                   registerSymbol: U => Unit,
-                                                   duplicatesAllowed: Boolean = false): List[Diagnostic] = {
-    register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
-  }
-
-  extension[T] (symbolAndDiagnostics: (T, Iterable[Diagnostic])) {
-    def ~>(sink: ListBuffer[Diagnostic]): T = {
-      sink ++= symbolAndDiagnostics._2
-      symbolAndDiagnostics._1
+      ts.flatMap(tuple => {
+        val ((childSymbol, range), decl) = tuple
+        if (!duplicatesAllowed && ((term && parentSymbol.scope.searchForTerm(childSymbol.name).nonEmpty) || (!term && parentSymbol.scope.searchForType(childSymbol.name).nonEmpty))) {
+          List(SymbolAlreadyDeclared(childSymbol.name, range))
+        } else {
+          parentSymbol.scope.define(childSymbol)
+          registerSymbol(childSymbol)
+          List.empty
+        }
+      })
     }
-  }
 
-  private def declareFile(kahwaFile: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
-    val translationUnit = TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
-    val diagnostics = ListBuffer[Diagnostic]()
+    private def registerTerm[T <: Decl, U <: Symbol](parentSymbol: Symbol,
+                                                     decls: List[T],
+                                                     declToSymbolAndRange: T => (U, SourceRange),
+                                                     registerSymbol: U => Unit,
+                                                     duplicatesAllowed: Boolean = false): List[Diagnostic] = {
+      register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
+    }
 
-    registerType(
-      translationUnit,
-      kahwaFile.classDecls,
-      classDecl => (declareClass(classDecl, translationUnit.scope, true) ~> diagnostics, SourceRange.dummy),
-      translationUnit.classes += _
-    )
+    private def registerType[T <: Decl, U <: Symbol](parentSymbol: Symbol,
+                                                     decls: List[T],
+                                                     declToSymbolAndRange: T => (U, SourceRange),
+                                                     registerSymbol: U => Unit,
+                                                     duplicatesAllowed: Boolean = false): List[Diagnostic] = {
+      register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
+    }
 
-    registerTerm(
-      translationUnit,
-      kahwaFile.functionDecls,
-      functionDecl => (declareFunction(functionDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
-      translationUnit.functions += _,
-      duplicatesAllowed = true
-    )
+    extension [T](symbolAndDiagnostics: (T, Iterable[Diagnostic])) {
+      def ~>(sink: ListBuffer[Diagnostic]): T = {
+        sink ++= symbolAndDiagnostics._2
+        symbolAndDiagnostics._1
+      }
+    }
 
-    registerType(
-      translationUnit,
-      kahwaFile.variableDecls,
-      variableDecl => (declareVisibleVariable(variableDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
-      translationUnit.variables += _
-    )
+    def declareFile(kahwaFile: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
+      val translationUnit = TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    (translationUnit, diagnostics.toList)
-  }
+      registerType(
+        translationUnit,
+        kahwaFile.classDecls,
+        classDecl => (declareClass(classDecl, translationUnit.scope, true) ~> diagnostics, SourceRange.dummy),
+        translationUnit.classes += _
+      )
 
-  private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean): (ClassSymbol, List[Diagnostic]) = {
-    val classSymbol = ClassSymbol(classDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+      registerTerm(
+        translationUnit,
+        kahwaFile.functionDecls,
+        functionDecl => (declareFunction(functionDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
+        translationUnit.functions += _,
+        duplicatesAllowed = true
+      )
 
-    registerType(
-      classSymbol,
-      classDecl.typeParameters,
-      (typeParameterDecl : TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, classSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
-      classSymbol.genericArguments += _
-    )
+      registerType(
+        translationUnit,
+        kahwaFile.variableDecls,
+        variableDecl => (declareVisibleVariable(variableDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
+        translationUnit.variables += _
+      )
 
-    registerType(
-      classSymbol,
-      classDecl.nestedClasses,
-      nestedClassDecl => (declareClass(nestedClassDecl, classSymbol.scope, false) ~> diagnostics, classDecl.range),
-      classSymbol.nestedClasses += _
-    )
+      (translationUnit, diagnostics.toList)
+    }
 
-    registerTerm(
-      classSymbol,
-      classDecl.methods,
-      methodDecl => (declareMethod(methodDecl, classSymbol.scope) ~> diagnostics, methodDecl.range),
-      classSymbol.methods += _,
-      duplicatesAllowed = true
-    )
+    private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean): (ClassSymbol, List[Diagnostic]) = {
+      val classSymbol = ClassSymbol(classDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    registerTerm(
-      classSymbol,
-      classDecl.fields,
-      variableDecl => (declareField(variableDecl, classSymbol.scope) ~> diagnostics, variableDecl.range),
-      classSymbol.fields += _
-    )
-    
-    classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel) ~> diagnostics
+      registerType(
+        classSymbol,
+        classDecl.typeParameters,
+        (typeParameterDecl: TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, classSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
+        classSymbol.genericArguments += _
+      )
 
-    diagnostics ++= modifierNotAllowed(classDecl.modifiers, Set(Modifier.STATIC, Modifier.OVERRIDE).contains)
+      registerType(
+        classSymbol,
+        classDecl.nestedClasses,
+        nestedClassDecl => (declareClass(nestedClassDecl, classSymbol.scope, false) ~> diagnostics, classDecl.range),
+        classSymbol.nestedClasses += _
+      )
 
-    classSymbol.setModality(resolveModality(classDecl.modifiers) ~> diagnostics)
+      registerTerm(
+        classSymbol,
+        classDecl.methods,
+        methodDecl => (declareMethod(methodDecl, classSymbol.scope) ~> diagnostics, methodDecl.range),
+        classSymbol.methods += _,
+        duplicatesAllowed = true
+      )
 
-    (classSymbol, diagnostics.toList)
-  }
+      registerTerm(
+        classSymbol,
+        classDecl.fields,
+        variableDecl => (declareField(variableDecl, classSymbol.scope) ~> diagnostics, variableDecl.range),
+        classSymbol.fields += _
+      )
 
-  private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope): (FunctionSymbol, List[Diagnostic]) = {
-    val functionSymbol = FunctionSymbol(functionDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+      classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel) ~> diagnostics
 
-    registerType(
-      functionSymbol,
-      functionDecl.typeParameters,
-      (typeParameterDecl: TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, functionSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
-      functionSymbol.genericArguments += _
-    )
+      diagnostics ++= modifierNotAllowed(classDecl.modifiers, Set(Modifier.STATIC, Modifier.OVERRIDE).contains)
 
-    registerTerm(
-      functionSymbol,
-      functionDecl.parameters,
-      variableDecl => (declareVariable(variableDecl, functionSymbol.scope) ~> diagnostics, variableDecl.range),
-      functionSymbol.parameters += _
-    )
+      classSymbol.setModality(resolveModality(classDecl.modifiers) ~> diagnostics)
 
-    functionSymbol.visibility = resolveVisibility(functionDecl.modifiers, true) ~> diagnostics
-    functionSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      (classSymbol, diagnostics.toList)
+    }
 
-    diagnostics ++= modifierNotAllowed(functionDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
+    private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope): (FunctionSymbol, List[Diagnostic]) = {
+      val functionSymbol = FunctionSymbol(functionDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    (functionSymbol, diagnostics.toList)
-  }
+      registerType(
+        functionSymbol,
+        functionDecl.typeParameters,
+        (typeParameterDecl: TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, functionSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
+        functionSymbol.genericArguments += _
+      )
 
-  private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): (MethodSymbol, List[Diagnostic]) = {
-    val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+      registerTerm(
+        functionSymbol,
+        functionDecl.parameters,
+        variableDecl => (declareVariable(variableDecl, functionSymbol.scope) ~> diagnostics, variableDecl.range),
+        functionSymbol.parameters += _
+      )
 
-    registerType(
-      methodSymbol,
-      functionDecl.typeParameters,
-      (typeParameterDecl : TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, methodSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
-      methodSymbol.genericArguments += _
-    )
+      functionSymbol.visibility = resolveVisibility(functionDecl.modifiers, true) ~> diagnostics
+      functionSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
 
-    registerTerm(
-      methodSymbol,
-      functionDecl.parameters,
-      variableDecl => (declareVariable(variableDecl, methodSymbol.scope) ~> diagnostics, variableDecl.range),
-      methodSymbol.parameters += _
-    )
+      diagnostics ++= modifierNotAllowed(functionDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
 
-    methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false) ~> diagnostics
-    methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      (functionSymbol, diagnostics.toList)
+    }
 
-    methodSymbol.setModality(resolveModality(functionDecl.modifiers) ~> diagnostics)
-    methodSymbol.isAnOverride = hasModifier(functionDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+    private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): (MethodSymbol, List[Diagnostic]) = {
+      val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    (methodSymbol, diagnostics.toList)
-  }
+      registerType(
+        methodSymbol,
+        functionDecl.typeParameters,
+        (typeParameterDecl: TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, methodSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
+        methodSymbol.genericArguments += _
+      )
 
-  private def declareVariable(variableDecl: VariableDecl, outerScope: Scope): (VariableSymbol, List[Diagnostic]) = {
-    val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+      registerTerm(
+        methodSymbol,
+        functionDecl.parameters,
+        variableDecl => (declareVariable(variableDecl, methodSymbol.scope) ~> diagnostics, variableDecl.range),
+        methodSymbol.parameters += _
+      )
 
-    variableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-    diagnostics ++= modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
+      methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false) ~> diagnostics
+      methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC) ~> diagnostics
 
-    (variableSymbol, diagnostics.toList)
-  }
+      methodSymbol.setModality(resolveModality(functionDecl.modifiers) ~> diagnostics)
+      methodSymbol.isAnOverride = hasModifier(functionDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
 
-  private def declareVisibleVariable(variableDecl: VariableDecl, outerScope: Scope): (VisibleVariableSymbol, List[Diagnostic]) = {
-    val visibleVariableSymbol = VisibleVariableSymbol(variableDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+      (methodSymbol, diagnostics.toList)
+    }
 
-    visibleVariableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-    visibleVariableSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
+    private def declareVariable(variableDecl: VariableDecl, outerScope: Scope): (VariableSymbol, List[Diagnostic]) = {
+      val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    diagnostics ++= modifierNotAllowed(variableDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
+      variableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      diagnostics ++= modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
 
-    (visibleVariableSymbol, diagnostics.toList)
-  }
+      (variableSymbol, diagnostics.toList)
+    }
 
-  private def declareField(variableDecl: VariableDecl, outerScope: Scope): (FieldSymbol, List[Diagnostic]) = {
-    val fieldSymbol = FieldSymbol(variableDecl.name, outerScope)
-    val diagnostics = ListBuffer[Diagnostic]()
+    private def declareVisibleVariable(variableDecl: VariableDecl, outerScope: Scope): (VisibleVariableSymbol, List[Diagnostic]) = {
+      val visibleVariableSymbol = VisibleVariableSymbol(variableDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    fieldSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
-    fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
+      visibleVariableSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      visibleVariableSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
 
-    fieldSymbol.setModality(resolveModality(variableDecl.modifiers) ~> diagnostics)
-    fieldSymbol.isAnOverride = hasModifier(variableDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+      diagnostics ++= modifierNotAllowed(variableDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
 
-    (fieldSymbol, diagnostics.toList)
-  }
+      (visibleVariableSymbol, diagnostics.toList)
+    }
 
-  private def resolveVisibility(allModifiers: List[ModifierNode], topLevel: Boolean): (Visibility, List[Diagnostic]) = {
-    val modifiers = allModifiers.filter(_.modifier.isVisibility)
+    private def declareField(variableDecl: VariableDecl, outerScope: Scope): (FieldSymbol, List[Diagnostic]) = {
+      val fieldSymbol = FieldSymbol(variableDecl.name, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
 
-    val diagnostics = ListBuffer[Diagnostic]()
+      fieldSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC) ~> diagnostics
+      fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true) ~> diagnostics
 
-    val res = if (modifiers.isEmpty) {
-      Visibility.PUBLIC
-    } else if (modifiers.size == 1) {
-      if (topLevel && modifiers.head.modifier == Modifier.PROTECTED) {
+      fieldSymbol.setModality(resolveModality(variableDecl.modifiers) ~> diagnostics)
+      fieldSymbol.isAnOverride = hasModifier(variableDecl.modifiers, Modifier.OVERRIDE) ~> diagnostics
+
+      (fieldSymbol, diagnostics.toList)
+    }
+
+    private def resolveVisibility(allModifiers: List[ModifierNode], topLevel: Boolean): (Visibility, List[Diagnostic]) = {
+      val modifiers = allModifiers.filter(_.modifier.isVisibility)
+
+      val diagnostics = ListBuffer[Diagnostic]()
+
+      val res = if (modifiers.isEmpty) {
         Visibility.PUBLIC
+      } else if (modifiers.size == 1) {
+        if (topLevel && modifiers.head.modifier == Modifier.PROTECTED) {
+          Visibility.PUBLIC
+        } else {
+          Visibility.fromModifier(modifiers.head.modifier)
+        }
       } else {
         Visibility.fromModifier(modifiers.head.modifier)
       }
-    } else {
-      Visibility.fromModifier(modifiers.head.modifier)
+
+      var publicFound = false
+      var protectedFound = false
+      var privateFound = false
+
+      modifiers.foreach(modifierNode => modifierNode.modifier match {
+        case Modifier.PUBLIC => {
+          if ((!topLevel && protectedFound) || privateFound) {
+            diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PRIVATE, PUBLIC, modifierNode.range)
+          } else if (publicFound) {
+            diagnostics += RepeatedModifier(PUBLIC, modifierNode.range)
+          }
+          publicFound = true
+        }
+        case Modifier.PRIVATE => {
+          if ((!topLevel && protectedFound) || publicFound) {
+            diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PRIVATE, PRIVATE, modifierNode.range)
+          } else if (privateFound) {
+            diagnostics += RepeatedModifier(PRIVATE, modifierNode.range)
+          }
+          privateFound = true
+        }
+        case Modifier.PROTECTED => {
+          if (topLevel) {
+            diagnostics += ModifierNotAllowed(PROTECTED, modifierNode.range)
+          } else if (publicFound || privateFound) {
+            diagnostics += IllegalModifierCombination(if (publicFound) PUBLIC else PRIVATE, PROTECTED, modifierNode.range)
+          } else if (protectedFound) {
+            diagnostics += RepeatedModifier(PROTECTED, modifierNode.range)
+          }
+          protectedFound = true
+        }
+        case _ => throw IllegalStateException("Should be unreachable")
+      })
+
+      (res, diagnostics.toList)
     }
 
-    var publicFound = false
-    var protectedFound = false
-    var privateFound = false
+    private def modifierNotAllowed(modifiers: List[ModifierNode], notAllowed: Modifier => Boolean): List[Diagnostic] = {
+      modifiers.collect(modifierNode => modifierNode.modifier match {
+        case modifier if notAllowed(modifier) => ModifierNotAllowed(modifier, modifierNode.range)
+      })
+    }
 
-    modifiers.foreach(modifierNode => modifierNode.modifier match {
-      case Modifier.PUBLIC => {
-        if ((!topLevel && protectedFound) || privateFound) {
-          diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PRIVATE, PUBLIC, modifierNode.range)
-        } else if (publicFound) {
-          diagnostics += RepeatedModifier(PUBLIC, modifierNode.range)
+    private def resolveModality(allModifiers: List[ModifierNode]): (Modifier, List[Diagnostic]) = {
+      val modifiers = allModifiers.filter(_.modifier.isModality)
+
+      val diagnostics = ListBuffer[Diagnostic]()
+
+      val res = if (modifiers.nonEmpty) {
+        if (modifiers.exists(_.modifier == Modifier.ABSTRACT)) {
+          Modifier.ABSTRACT
+        } else if (modifiers.exists(_.modifier == Modifier.OPEN)) {
+          Modifier.OPEN
+        } else {
+          Modifier.FINAL
         }
-        publicFound = true
-      }
-      case Modifier.PRIVATE => {
-        if ((!topLevel && protectedFound) || publicFound) {
-          diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PRIVATE, PRIVATE, modifierNode.range)
-        } else if (privateFound) {
-          diagnostics += RepeatedModifier(PRIVATE, modifierNode.range)
-        }
-        privateFound = true
-      }
-      case Modifier.PROTECTED => {
-        if (topLevel) {
-          diagnostics += ModifierNotAllowed(PROTECTED, modifierNode.range)
-        } else if (publicFound || privateFound) {
-          diagnostics += IllegalModifierCombination(if (publicFound) PUBLIC else PRIVATE, PROTECTED, modifierNode.range)
-        } else if (protectedFound) {
-          diagnostics += RepeatedModifier(PROTECTED, modifierNode.range)
-        }
-        protectedFound = true
-      }
-      case _ => throw IllegalStateException("Should be unreachable")
-    })
-
-    (res, diagnostics.toList)
-  }
-
-  private def modifierNotAllowed(modifiers: List[ModifierNode], notAllowed: Modifier => Boolean): List[Diagnostic] = {
-    modifiers.collect(modifierNode => modifierNode.modifier match {
-      case modifier if notAllowed(modifier) => ModifierNotAllowed(modifier, modifierNode.range)
-    })
-  }
-
-  private def resolveModality(allModifiers: List[ModifierNode]): (Modifier, List[Diagnostic]) = {
-    val modifiers = allModifiers.filter(_.modifier.isModality)
-
-    val diagnostics = ListBuffer[Diagnostic]()
-
-    val res = if (modifiers.nonEmpty) {
-      if (modifiers.exists(_.modifier == Modifier.ABSTRACT)) {
-        Modifier.ABSTRACT
-      } else if (modifiers.exists(_.modifier == Modifier.OPEN)) {
-        Modifier.OPEN
       } else {
         Modifier.FINAL
       }
-    } else {
-      Modifier.FINAL
+
+      var finalFound = false
+      var openFound = false
+      var abstractFound = false
+
+      modifiers.foreach(modifierNode => modifierNode.modifier match {
+        case Modifier.OPEN => {
+          if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.OPEN, modifierNode.range)
+          else if (openFound) diagnostics += RepeatedModifier(Modifier.OPEN, modifierNode.range)
+          openFound = true
+        }
+        case Modifier.FINAL => {
+          if (abstractFound || openFound) diagnostics += IllegalModifierCombination(if (abstractFound) Modifier.ABSTRACT else Modifier.OPEN, Modifier.FINAL, modifierNode.range)
+          else if (finalFound) diagnostics += RepeatedModifier(Modifier.FINAL, modifierNode.range)
+          finalFound = true
+        }
+        case Modifier.ABSTRACT => {
+          if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.ABSTRACT, modifierNode.range)
+          else if (abstractFound) diagnostics += RepeatedModifier(Modifier.ABSTRACT, modifierNode.range)
+          abstractFound = true
+        }
+        case _ => throw IllegalStateException("Should be unreachable")
+      })
+
+      (res, diagnostics.toList)
     }
 
-    var finalFound = false
-    var openFound = false
-    var abstractFound = false
-
-    modifiers.foreach(modifierNode => modifierNode.modifier match {
-      case Modifier.OPEN => {
-        if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.OPEN, modifierNode.range)
-        else if (openFound) diagnostics += RepeatedModifier(Modifier.OPEN, modifierNode.range)
-        openFound = true
-      }
-      case Modifier.FINAL => {
-        if (abstractFound || openFound) diagnostics += IllegalModifierCombination(if (abstractFound) Modifier.ABSTRACT else Modifier.OPEN, Modifier.FINAL, modifierNode.range)
-        else if (finalFound) diagnostics += RepeatedModifier(Modifier.FINAL, modifierNode.range)
-        finalFound = true
-      }
-      case Modifier.ABSTRACT => {
-        if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.ABSTRACT, modifierNode.range)
-        else if (abstractFound) diagnostics += RepeatedModifier(Modifier.ABSTRACT, modifierNode.range)
-        abstractFound = true
-      }
-      case _ => throw IllegalStateException("Should be unreachable")
-    })
-
-    (res, diagnostics.toList)
+    private def hasModifier(modifiers: List[ModifierNode], desiredModifier: Modifier): (Boolean, List[Diagnostic]) = {
+      val diagnostics = ListBuffer[Diagnostic]()
+      var found = false
+      modifiers.foreach(modifierNode => {
+        if (modifierNode.modifier == desiredModifier) {
+          if (!found) found = true
+          else {
+            diagnostics += RepeatedModifier(desiredModifier, modifierNode.range)
+          }
+        }
+      })
+      (found, diagnostics.toList)
+    }
   }
 
-  private def hasModifier(modifiers: List[ModifierNode], desiredModifier: Modifier): (Boolean, List[Diagnostic]) = {
-    val diagnostics = ListBuffer[Diagnostic]()
-    var found = false
-    modifiers.foreach(modifierNode => {
-      if (modifierNode.modifier == desiredModifier) {
-        if (!found) found = true
-        else {
-          diagnostics += RepeatedModifier(desiredModifier, modifierNode.range)
-        }
+  private class TypedefReplacer(typedefMap: Map[String, TypeRef]) extends AstTransformer {
+    override def transform(typeRef: TypeRef): TypeRef = {
+      // Look up the name in the typedef map
+      typedefMap.get(typeRef.name.name) match {
+        case Some(targetType) =>
+          // Found a typedef! Replace it and recurse (for typedef chains)
+          transform(targetType)
+        case None =>
+          // Not a typedef, but still recurse into generic arguments
+          super.transform(typeRef)
       }
-    })
-    (found, diagnostics.toList)
+    }
+  }
+
+  private object TypedefReplacer {
+    def replaceTypedefs(kahwaFile: KahwaFile): KahwaFile = {
+      val typedefMap = kahwaFile.typedefDecls.map { typedef =>
+        typedef.name -> typedef.referredType
+      }.toMap
+
+      val replacer = TypedefReplacer(typedefMap)
+      replacer.transform(kahwaFile)
+    }
   }
 }
