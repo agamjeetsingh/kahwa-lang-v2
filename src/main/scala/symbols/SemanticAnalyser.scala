@@ -1,11 +1,12 @@
 package symbols
 
 import ast.Modifier.{FINAL, OVERRIDE, PRIVATE, PROTECTED, PUBLIC, STATIC}
-import ast.{ClassDecl, Decl, FunctionDecl, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, VariableDecl}
+import ast.{ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
 import diagnostics.Diagnostic
-import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared}
+import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared, TypedefCycleDetected}
 import sources.SourceRange
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object SemanticAnalyser {
@@ -55,7 +56,7 @@ object SemanticAnalyser {
     }
 
     extension [T](symbolAndDiagnostics: (T, Iterable[Diagnostic])) {
-      def ~>(sink: ListBuffer[Diagnostic]): T = {
+      private def ~>(sink: ListBuffer[Diagnostic]): T = {
         sink ++= symbolAndDiagnostics._2
         symbolAndDiagnostics._1
       }
@@ -85,6 +86,13 @@ object SemanticAnalyser {
         kahwaFile.variableDecls,
         variableDecl => (declareVisibleVariable(variableDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
         translationUnit.variables += _
+      )
+
+      registerType(
+        translationUnit,
+        kahwaFile.typedefDecls,
+        typedefDecl => (declareTypedef(typedefDecl, translationUnit.scope) ~> diagnostics, SourceRange.dummy),
+        translationUnit.typedefs += _
       )
 
       (translationUnit, diagnostics.toList)
@@ -156,6 +164,23 @@ object SemanticAnalyser {
       diagnostics ++= modifierNotAllowed(functionDecl.modifiers, modifier => modifier.isModality || modifier == OVERRIDE)
 
       (functionSymbol, diagnostics.toList)
+    }
+
+    private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope): (TypedefSymbol, List[Diagnostic]) = {
+      val typedefSymbol = TypedefSymbol(typedefDecl.name, typedefDecl.referredType, outerScope)
+      val diagnostics = ListBuffer[Diagnostic]()
+
+      registerType(
+        typedefSymbol,
+        typedefDecl.typeParameters,
+        (typeParameterDecl: TypeParameterDecl) => (TypeParameterSymbol(typeParameterDecl.name, typedefSymbol.scope, typeParameterDecl.variance), typeParameterDecl.range),
+        typedefSymbol.genericArguments += _
+      )
+
+      typedefSymbol.visibility = resolveVisibility(typedefDecl.modifiers, true) ~> diagnostics
+      diagnostics ++= modifierNotAllowed(typedefDecl.modifiers, !_.isVisibility)
+
+      (typedefSymbol, diagnostics.toList)
     }
 
     private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): (MethodSymbol, List[Diagnostic]) = {
