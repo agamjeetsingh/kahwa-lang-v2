@@ -26,7 +26,7 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
   }
 }
 
-sealed abstract class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
+class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
 sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
@@ -92,7 +92,7 @@ class TranslationUnit(override val name: String, outerScopes: List[Scope]) exten
   val typedefs: ListBuffer[TypedefSymbol] = ListBuffer.empty
 }
 
-class TypedefSymbol(override val name: String, outerScope: Scope) extends Symbol(name, outerScope) {
+class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val referredType: SemanticType = GlobalScope.ErrorType
   var visibility: Visibility = Visibility.default

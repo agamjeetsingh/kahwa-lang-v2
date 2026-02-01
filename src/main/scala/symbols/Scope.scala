@@ -2,35 +2,39 @@ package symbols
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import symbols.TypeSymbol
 
-type SymbolTable = mutable.Map[String, mutable.ListBuffer[Symbol]]
+type SymbolTable[T <: Symbol] = mutable.Map[String, mutable.ListBuffer[T]]
 
 class Scope {
-  def searchCurrentForType(name: String): List[Symbol] = {
+  def searchCurrentForType(name: String): List[TypeSymbol] = {
     typeSymbolTable.getOrElse(name, Nil).toList
   }
 
-  def searchCurrentForTerm(name: String): List[Symbol] = {
+  def searchCurrentForTerm(name: String): List[TermSymbol] = {
     termSymbolTable.getOrElse(name, Nil).toList
   }
 
-  def searchForType(name: String): List[Symbol] = {
+  def searchForType(name: String): List[TypeSymbol] = {
     typeSymbolTable.getOrElse(name, outerScopes.iterator
       .map(_.searchForType(name))
       .find(_.nonEmpty)
       .getOrElse(Nil)).toList
   }
 
-  def searchForTerm(name: String): List[Symbol] = {
-    typeSymbolTable.getOrElse(name, outerScopes.iterator
+  def searchForTerm(name: String): List[TermSymbol] = {
+    termSymbolTable.getOrElse(name, outerScopes.iterator
       .map(_.searchForTerm(name))
       .find(_.nonEmpty)
       .getOrElse(Nil)).toList
   }
 
   def define(symbol: Symbol): Unit = {
-    if (symbol.isType) typeSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
-    else if (symbol.isTerm) termSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
+    symbol match {
+      case symbol: TypeSymbol => typeSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
+      case symbol: TermSymbol => termSymbolTable.getOrElse(symbol.name, ListBuffer.empty) += symbol
+      case unit: TranslationUnit => ???
+    }
   }
 
   def defineAll(symbols: List[Symbol]): Unit = {
@@ -41,12 +45,12 @@ class Scope {
     outerScopes += outerScope
   }
 
-  private val typeSymbolTable: SymbolTable = mutable.Map.empty
-  private val termSymbolTable: SymbolTable = mutable.Map.empty
+  private val typeSymbolTable: SymbolTable[TypeSymbol] = mutable.Map.empty
+  private val termSymbolTable: SymbolTable[TermSymbol] = mutable.Map.empty
 
   private val outerScopes: mutable.ListBuffer[Scope] = mutable.ListBuffer.empty
 }
 
 object GlobalScope extends Scope {
-  val NothingType: SemanticType = SemanticType(TypeSymbol("Nothing", GlobalScope), List.empty)
+  val ErrorType: SemanticType = SemanticType(TypeSymbol("Error-Type", GlobalScope), List.empty)
 }
