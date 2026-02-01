@@ -57,7 +57,7 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
 
 class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
   var isStatic: Boolean = false
-  val semanticType: SemanticType = GlobalScope.ErrorType
+  var semanticType: SemanticType = GlobalScope.ErrorType
   val initExpr: Option[Expr] = None
 }
 
@@ -94,7 +94,7 @@ class TranslationUnit(override val name: String, outerScopes: List[Scope]) exten
 
 class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
-  val referredType: SemanticType = GlobalScope.ErrorType
+  var referredType: SemanticType = GlobalScope.ErrorType
   var visibility: Visibility = Visibility.default
 }
 
