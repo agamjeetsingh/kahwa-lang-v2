@@ -44,9 +44,13 @@ sealed trait Ident extends Expr {
   override def prettyPrint: String = name
 }
 
-case class Unqual(name: String, range: SourceRange = SourceRange.dummy) extends Ident
+case class Unqual(name: String, range: SourceRange = SourceRange.dummy) extends Ident {
+  override def prettyPrint: String = name
+}
 
-case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident
+case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident {
+  override def prettyPrint: String = name
+}
 
 enum BinaryOp extends PrettyPrintable {
   case EQUALS // "="
@@ -152,7 +156,7 @@ case class IndexExpr(callee: Expr, arg: Expr, range: SourceRange = SourceRange.d
 }
 
 case class MemberAccessExpr(base: Expr, member: Ident, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${base.prettyPrint}.$member"
+  override def prettyPrint: String = s"${base.prettyPrint}.${member.prettyPrint}"
 }
 
 case class TernaryExpr(cond: Expr, expr1: Expr, expr2: Expr, range: SourceRange = SourceRange.dummy) extends Expr {
@@ -223,7 +227,7 @@ case class TypeRef(name: Ident, args: List[(TypeRef, Variance)], range: SourceRa
     }.mkString("[", ", ", "]")
     else ""
 
-    s"$name$prettyArgs"
+    s"${name.prettyPrint}$prettyArgs"
   }
 }
 
@@ -276,7 +280,7 @@ extension (modifiers: List[ModifierNode]) {
 
 extension (typeParameters: List[TypeParameterDecl]) {
   @targetName("typeParameterPrettyPrint")
-  def prettyPrint: String = if typeParameters.nonEmpty then typeParameters.map(_.prettyPrint).mkString("<", ", ", ">")
+  def prettyPrint: String = if typeParameters.nonEmpty then typeParameters.map(_.prettyPrint).mkString("[", ", ", "]")
   else ""
 }
 
@@ -321,7 +325,7 @@ case class ClassDecl(name: String,
                      nestedClasses: List[ClassDecl] = List.empty,
                      typeParameters: List[TypeParameterDecl] = List.empty, 
                      range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint}class${typeParameters.prettyPrint} $name${
+  override def prettyPrint: String = s"${modifiers.prettyPrint}class $name${typeParameters.prettyPrint}${
     if superClasses.isEmpty then ""
     else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
   } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n}"
@@ -333,5 +337,5 @@ case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
                      variableDecls: List[VariableDecl] = List.empty, 
                      range: SourceRange = SourceRange.dummy) extends AstNode {
   override def prettyPrint: String
-  = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
+  = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}\n${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
 }
