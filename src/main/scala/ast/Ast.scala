@@ -47,6 +47,8 @@ sealed trait Ident extends Expr {
 
 case class Unqual(head: String, override val tail: List[String] = List.empty, range: SourceRange = SourceRange.dummy) extends Ident {
   override def prettyPrint: String = (head :: tail).mkString(".")
+
+  def name: String = (head :: tail).last
 }
 
 case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident {
@@ -158,8 +160,8 @@ case class IndexExpr(callee: Expr, arg: Expr, range: SourceRange = SourceRange.d
   override def prettyPrint: String = s"${callee.prettyPrint}[${arg.prettyPrint}]"
 }
 
-case class MemberAccessExpr(base: Expr, member: Ident, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${base.prettyPrint}.${member.prettyPrint}"
+case class MemberAccessExpr(base: Expr, member: String, range: SourceRange = SourceRange.dummy) extends Expr {
+  override def prettyPrint: String = s"${base.prettyPrint}.$member"
 }
 
 case class TernaryExpr(cond: Expr, expr1: Expr, expr2: Expr, range: SourceRange = SourceRange.dummy) extends Expr {
@@ -339,7 +341,10 @@ case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
                      classDecls: List[ClassDecl] = List.empty,
                      functionDecls: List[FunctionDecl] = List.empty,
                      variableDecls: List[VariableDecl] = List.empty, 
-                     range: SourceRange = SourceRange.dummy) extends AstNode {
+                     range: SourceRange = SourceRange.dummy) extends Decl {
   override def prettyPrint: String
   = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}\n${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
+
+  override val name: String = ???
+  override val modifiers: List[ModifierNode] = List.empty
 }

@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{AstNode, ClassDecl, FunctionDecl, KahwaFile, TypeParameterDecl, TypedefDecl, VariableDecl}
+import ast.{AstNode, ClassDecl, Decl, FunctionDecl, KahwaFile, TypeParameterDecl, TypedefDecl, VariableDecl}
 
 /**
  * Type-safe extension methods for retrieving symbols from AST nodes.
@@ -19,7 +19,7 @@ object AstSymbolExtensions {
      * Retrieves the ClassSymbol associated with this ClassDecl.
      * @throws IllegalStateException if the symbol is not found or is not a ClassSymbol
      */
-    def symbol(using map: Map[AstNode, Symbol]): ClassSymbol =
+    def symbol(using map: Map[Decl, Symbol]): ClassSymbol =
       map.get(classDecl).collect { case s: ClassSymbol => s }
         .getOrElse(throw IllegalStateException(
           s"ClassSymbol not found for class '${classDecl.name}' at ${classDecl.range}. " +
@@ -29,7 +29,7 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this ClassDecl's symbol.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
   }
 
   extension (functionDecl: FunctionDecl) {
@@ -38,7 +38,7 @@ object AstSymbolExtensions {
      * Note: MethodSymbol extends FunctionSymbol, so this covers both cases.
      * @throws IllegalStateException if the symbol is not found or is not a FunctionSymbol
      */
-    def symbol(using map: Map[AstNode, Symbol]): FunctionSymbol =
+    def symbol(using map: Map[Decl, Symbol]): FunctionSymbol =
       map.get(functionDecl).collect { case s: FunctionSymbol => s }
         .getOrElse(throw IllegalStateException(
           s"FunctionSymbol not found for function '${functionDecl.name}' at ${functionDecl.range}. " +
@@ -48,17 +48,17 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this FunctionDecl's symbol.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
 
     /**
      * Checks if this FunctionDecl is associated with a MethodSymbol (vs a top-level FunctionSymbol).
      */
-    def isMethod(using map: Map[AstNode, Symbol]): Boolean = symbol.isInstanceOf[MethodSymbol]
+    def isMethod(using map: Map[Decl, Symbol]): Boolean = symbol.isInstanceOf[MethodSymbol]
 
     /**
      * Retrieves the MethodSymbol if this is a method, or None if it's a top-level function.
      */
-    def asMethodSymbol(using map: Map[AstNode, Symbol]): Option[MethodSymbol] =
+    def asMethodSymbol(using map: Map[Decl, Symbol]): Option[MethodSymbol] =
       map.get(functionDecl).collect { case s: MethodSymbol => s }
   }
 
@@ -67,7 +67,7 @@ object AstSymbolExtensions {
      * Retrieves the TypedefSymbol associated with this TypedefDecl.
      * @throws IllegalStateException if the symbol is not found or is not a TypedefSymbol
      */
-    def symbol(using map: Map[AstNode, Symbol]): TypedefSymbol =
+    def symbol(using map: Map[Decl, Symbol]): TypedefSymbol =
       map.get(typedefDecl).collect { case s: TypedefSymbol => s }
         .getOrElse(throw IllegalStateException(
           s"TypedefSymbol not found for typedef '${typedefDecl.name}' at ${typedefDecl.range}. " +
@@ -77,7 +77,7 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this TypedefDecl's symbol.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
   }
 
   extension (variableDecl: VariableDecl) {
@@ -87,7 +87,7 @@ object AstSymbolExtensions {
      * and FieldSymbol, so it covers all three cases.
      * @throws IllegalStateException if the symbol is not found or is not a VariableSymbol
      */
-    def symbol(using map: Map[AstNode, Symbol]): VariableSymbol =
+    def symbol(using map: Map[Decl, Symbol]): VariableSymbol =
       map.get(variableDecl).collect { case s: VariableSymbol => s }
         .getOrElse(throw IllegalStateException(
           s"VariableSymbol not found for variable '${variableDecl.name}' at ${variableDecl.range}. " +
@@ -97,28 +97,28 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this VariableDecl's symbol.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
 
     /**
      * Checks if this VariableDecl is associated with a FieldSymbol.
      */
-    def isField(using map: Map[AstNode, Symbol]): Boolean = symbol.isInstanceOf[FieldSymbol]
+    def isField(using map: Map[Decl, Symbol]): Boolean = symbol.isInstanceOf[FieldSymbol]
 
     /**
      * Checks if this VariableDecl is associated with a VisibleVariableSymbol (top-level or field).
      */
-    def isVisible(using map: Map[AstNode, Symbol]): Boolean = symbol.isInstanceOf[VisibleVariableSymbol]
+    def isVisible(using map: Map[Decl, Symbol]): Boolean = symbol.isInstanceOf[VisibleVariableSymbol]
 
     /**
      * Retrieves the FieldSymbol if this is a field, or None otherwise.
      */
-    def asFieldSymbol(using map: Map[AstNode, Symbol]): Option[FieldSymbol] =
+    def asFieldSymbol(using map: Map[Decl, Symbol]): Option[FieldSymbol] =
       map.get(variableDecl).collect { case s: FieldSymbol => s }
 
     /**
      * Retrieves the VisibleVariableSymbol if this is a visible variable, or None otherwise.
      */
-    def asVisibleVariableSymbol(using map: Map[AstNode, Symbol]): Option[VisibleVariableSymbol] =
+    def asVisibleVariableSymbol(using map: Map[Decl, Symbol]): Option[VisibleVariableSymbol] =
       map.get(variableDecl).collect { case s: VisibleVariableSymbol => s }
   }
 
@@ -127,7 +127,7 @@ object AstSymbolExtensions {
      * Retrieves the TypeParameterSymbol associated with this TypeParameterDecl.
      * @throws IllegalStateException if the symbol is not found or is not a TypeParameterSymbol
      */
-    def symbol(using map: Map[AstNode, Symbol]): TypeParameterSymbol =
+    def symbol(using map: Map[Decl, Symbol]): TypeParameterSymbol =
       map.get(typeParameterDecl).collect { case s: TypeParameterSymbol => s }
         .getOrElse(throw IllegalStateException(
           s"TypeParameterSymbol not found for type parameter '${typeParameterDecl.name}' at ${typeParameterDecl.range}. " +
@@ -137,7 +137,7 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this TypeParameterDecl's symbol.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
   }
 
   extension (kahwaFile: KahwaFile) {
@@ -145,7 +145,7 @@ object AstSymbolExtensions {
      * Retrieves the TranslationUnit associated with this KahwaFile.
      * @throws IllegalStateException if the symbol is not found or is not a TranslationUnit
      */
-    def symbol(using map: Map[AstNode, Symbol]): TranslationUnit =
+    def symbol(using map: Map[Decl, Symbol]): TranslationUnit =
       map.get(kahwaFile).collect { case s: TranslationUnit => s }
         .getOrElse(throw IllegalStateException(
           s"TranslationUnit not found for file at ${kahwaFile.range}. " +
@@ -155,7 +155,7 @@ object AstSymbolExtensions {
     /**
      * Retrieves the Scope associated with this KahwaFile's TranslationUnit.
      */
-    def symbolScope(using map: Map[AstNode, Symbol]): Scope = symbol.scope
+    def symbolScope(using map: Map[Decl, Symbol]): Scope = symbol.scope
   }
 
   /**

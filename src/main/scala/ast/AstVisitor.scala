@@ -164,11 +164,7 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     combine(r1, r2)
   }
 
-  def visitMemberAccessExpr(node: MemberAccessExpr): R = {
-    val r1 = node.base.accept(this)
-    val r2 = node.member.accept(this)
-    combine(r1, r2)
-  }
+  def visitMemberAccessExpr(node: MemberAccessExpr): R = node.base.accept(this)
 
   def visitTernaryExpr(node: TernaryExpr): R = {
     val r1 = node.cond.accept(this)

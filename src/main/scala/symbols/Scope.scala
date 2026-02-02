@@ -1,5 +1,7 @@
 package symbols
 
+import ast.Unqual
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import symbols.TypeSymbol
@@ -15,11 +17,75 @@ class Scope {
     termSymbolTable.getOrElse(name, Nil).toList
   }
 
+  def searchForType(ident: Unqual): List[TypeSymbol] = {
+    // a.b.c
+    def rec(head: String, tail: List[String]): List[TypeSymbol] = {
+      // head = a; tail = List(b, c)
+      tail match {
+        case nextHead :: nextTail => {
+          typeSymbolTable.getOrElse(head, List.empty).filter {
+            case _: ClassSymbol => true
+            case _ => false
+          } match {
+            case Nil => searchInParent() // a doesn't exist in current scope
+            case h :: _ => h.scope.searchForType(Unqual(nextHead, nextTail, ident.range)) match {
+              case Nil => searchInParent() // (b.c) didn't get resolved correctly
+              case res => res // Full a.b.c got resolved
+            }
+          }
+        }
+        case Nil => typeSymbolTable.getOrElse(head, searchInParent()).toList // There is no tail (just a), check directly
+      }
+    }
+
+    def searchInParent(): List[TypeSymbol] = {
+      outerScopes.iterator.map(_.searchForType(ident))
+        .find(_.nonEmpty)
+        .getOrElse(Nil)
+    }
+
+    ident match {
+      case Unqual(head, tail, _) => rec(head, tail)
+    }
+  }
+
   def searchForType(name: String): List[TypeSymbol] = {
     typeSymbolTable.getOrElse(name, outerScopes.iterator
       .map(_.searchForType(name))
       .find(_.nonEmpty)
       .getOrElse(Nil)).toList
+  }
+
+  def searchForTerm(ident: Unqual): List[TermSymbol] = {
+    // a.b.c
+    def rec(head: String, tail: List[String]): List[TermSymbol] = {
+      // head = a; tail = List(b, c)
+      tail match {
+        case nextHead :: nextTail => {
+          typeSymbolTable.getOrElse(head, List.empty).filter {
+            case _: ClassSymbol => true
+            case _ => false
+          } match {
+            case Nil => searchInParent() // a doesn't exist in current scope
+            case h :: _ => h.scope.searchForTerm(Unqual(nextHead, nextTail, ident.range)) match {
+              case Nil => searchInParent() // (b.c) didn't get resolved correctly
+              case res => res // Full a.b.c got resolved
+            }
+          }
+        }
+        case Nil => termSymbolTable.getOrElse(head, searchInParent()).toList // There is no tail (just a), check directly
+      }
+    }
+
+    def searchInParent(): List[TermSymbol] = {
+      outerScopes.iterator.map(_.searchForTerm(ident))
+        .find(_.nonEmpty)
+        .getOrElse(Nil)
+    }
+
+    ident match {
+      case Unqual(head, tail, _) => rec(head, tail)
+    }
   }
 
   def searchForTerm(name: String): List[TermSymbol] = {
@@ -33,7 +99,6 @@ class Scope {
     symbol match {
       case symbol: TypeSymbol => typeSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
       case symbol: TermSymbol => termSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
-      case _ => ???
     }
   }
 

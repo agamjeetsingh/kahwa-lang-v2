@@ -189,7 +189,7 @@ object Parser {
           (e: Expr) => CallExpr(e, args, e.range <-> range))
       ),
       Ops(Postfix)(
-        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, Unqual(ident.value), e.range <-> ident.range))
+        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, ident.value, e.range <-> ident.range))
       )
     )
   }
