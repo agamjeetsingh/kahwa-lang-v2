@@ -98,8 +98,8 @@ object SemanticAnalyser {
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
                                                      duplicatesAllowed: Boolean = false)
-                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
-      register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
+                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): Unit = {
+      diagnostics ++= register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, true)
     }
 
     private def registerType[T <: Decl, U <: Symbol](parentSymbol: Symbol,
@@ -107,8 +107,8 @@ object SemanticAnalyser {
                                                      declToSymbolAndRange: T => (U, SourceRange),
                                                      registerSymbol: U => Unit,
                                                      duplicatesAllowed: Boolean = false)
-                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol]): List[Diagnostic] = {
-      register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
+                                                    (using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): Unit = {
+      diagnostics ++= register(parentSymbol, decls, declToSymbolAndRange, registerSymbol, duplicatesAllowed, false)
     }
 
     private def declareClass(classDecl: ClassDecl, outerScope: Scope, topLevel: Boolean)(using nodeToSymbol: mutable.Map[AstNode, Symbol], diagnostics: ListBuffer[Diagnostic]): ClassSymbol = {
