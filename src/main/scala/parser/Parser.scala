@@ -77,11 +77,13 @@ object Parser {
     }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
 
   lazy val parseTypeRef: SafePointFunc ?=> Parsel[TypeRef, Token, Diagnostic] = {
-    spanned(parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map { tuple =>
-      val ((ident, optionalArgs), range) = tuple
+    spanned(parseIdentifier ~ optional(parseDot ~> sepBy(parseIdentifier, parseDot)) ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map { tuple =>
+      val (((head, optionalTail), optionalArgs), range) = tuple
+      // TODO - verify
+      val unqualRange = (if (optionalTail.toList.flatten.isEmpty) head.range else optionalTail.toList.flatten.last.range) <-> head.range
       optionalArgs match {
-        case Some(args) => TypeRef(Unqual(ident.value), args.map(_.swap), range)
-        case None => TypeRef(Unqual(ident.value), List.empty, range)
+        case Some(args) => TypeRef(Unqual(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), args.map(_.swap), range)
+        case None => TypeRef(Unqual(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), List.empty, range)
       }
     }
   }
@@ -109,7 +111,7 @@ object Parser {
       parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
       parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
       parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
-      parseIdentifier.map(tok => Unqual(tok.value, tok.range))
+      parseIdentifier.map(tok => Unqual(tok.value, List.empty, tok.range))
     )
   }
 
@@ -226,7 +228,7 @@ object Parser {
 
   lazy val parseGenericArguments: SafePointFunc ?=> Parsel[List[TypeParameterDecl], Token, Diagnostic] = {
     (parseLeftBracket ~> sepBy(parseVariance ~ parseTypeRef, parseComma) <~ parseRightBracket).map(genericArgs => {
-      genericArgs.map((variance, typeRef) => TypeParameterDecl(typeRef.name.name, variance))
+      genericArgs.map((variance, typeRef) => TypeParameterDecl(typeRef.name.prettyPrint, variance))
     })
   }
 
