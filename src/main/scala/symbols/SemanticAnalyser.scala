@@ -1,7 +1,7 @@
 package symbols
 
 import ast.Modifier.{FINAL, OVERRIDE, PRIVATE, PROTECTED, PUBLIC, STATIC}
-import ast.{AstNode, AstTransformer, ClassDecl, Decl, FunctionDecl, Ident, KahwaFile, Modifier, ModifierNode, TraversingVisitor, TypeParameterDecl, TypeRef, TypedefDecl, Unqual, VariableDecl}
+import ast.{AstNode, AstTransformer, BinaryExpr, CallExpr, ClassDecl, Decl, Expr, FunctionDecl, Ident, IndexExpr, KahwaFile, LiteralExpr, MemberAccessExpr, Modifier, ModifierNode, TernaryExpr, TraversingVisitor, TypeParameterDecl, TypeRef, TypedefDecl, UnaryExpr, Unqual, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{CannotResolveSymbol, IllegalModifierCombination, IncorrectNumberOfGenericArguments, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared, TypedefCycleDetected}
 import sources.SourceRange
@@ -13,6 +13,9 @@ import scala.collection.mutable.ListBuffer
 object SemanticAnalyser {
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
+
+    kahwaFile = AccessCompressor.transform(kahwaFile)
+
     given nodeToSymbol: mutable.Map[AstNode, Symbol] = mutable.Map()
     given diagnostics: ListBuffer[Diagnostic] = ListBuffer()
     val res = DeclareNames.declareFile(kahwaFile)
@@ -427,7 +430,7 @@ object SemanticAnalyser {
     }
 
     private def resolveType(typeRef: TypeRef, scope: Scope): (SemanticType, ListBuffer[Diagnostic]) = {
-      val symbols = scope.searchForType(typeRef.name.name)
+      val symbols = scope.searchForType(typeRef.name.prettyPrint)
       val diagnostics: ListBuffer[Diagnostic] = ListBuffer()
       symbols.find {
         case _: TypeSymbol => true
@@ -454,7 +457,7 @@ object SemanticAnalyser {
           }
         }
         case None => {
-          diagnostics += CannotResolveSymbol(typeRef.name.name, typeRef.range)
+          diagnostics += CannotResolveSymbol(typeRef.name.prettyPrint, typeRef.range)
           (GlobalScope.ErrorType, diagnostics)
         }
       }
@@ -493,7 +496,8 @@ object SemanticAnalyser {
       }.find(_.name == name) match {
         case Some(typedefDecl) => {
           val typeRef = typedefDecl.referredType
-          typeRef.name.name :: typeRef.args.map(_._1.name.name)
+          // TODO
+          typeRef.name.prettyPrint :: typeRef.args.map(_._1.name.prettyPrint)
         }
         case None => List.empty
       }
@@ -503,13 +507,26 @@ object SemanticAnalyser {
   private class TypedefReplacer(typedefMap: Map[String, TypeRef]) extends AstTransformer {
     override def transform(typeRef: TypeRef): TypeRef = {
       // Look up the name in the typedef map
-      typedefMap.get(typeRef.name.name) match {
+      // TODO
+      typedefMap.get(typeRef.name.head) match {
         case Some(targetType) =>
           // Found a typedef! Replace it and recurse (for typedef chains)
           transform(targetType.copy(range = typeRef.range))
         case None =>
           // Not a typedef, but still recurse into generic arguments
           super.transform(typeRef)
+      }
+    }
+  }
+
+  object AccessCompressor extends AstTransformer {
+    override def transform(expr: Expr): Expr = {
+      expr match {
+        case MemberAccessExpr(base, member, range) => transform(base) match {
+          case ident: Ident => Unqual(ident.head, ident.tail ++ (member.head :: member.tail), expr.range)
+          case _ => super.transform(expr)
+        }
+        case _ => super.transform(expr)
       }
     }
   }
