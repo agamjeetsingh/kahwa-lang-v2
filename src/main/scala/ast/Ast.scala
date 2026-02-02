@@ -39,22 +39,10 @@ case class StringLiteral(value: String, range: SourceRange = SourceRange.dummy) 
   override def prettyPrint: String = value
 }
 
-sealed trait Ident extends Expr {
-  def head: String
-  def tail: List[String] = List.empty
-  override def prettyPrint: String = (head :: tail).mkString(".")
-}
-
-case class Unqual(head: String, override val tail: List[String] = List.empty, range: SourceRange = SourceRange.dummy) extends Ident {
+case class Ident(head: String, tail: List[String] = List.empty, range: SourceRange = SourceRange.dummy) extends Expr {
   override def prettyPrint: String = (head :: tail).mkString(".")
 
   def name: String = (head :: tail).last
-}
-
-case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident {
-  override def prettyPrint: String = name
-
-  override def head: String = name
 }
 
 enum BinaryOp extends PrettyPrintable {

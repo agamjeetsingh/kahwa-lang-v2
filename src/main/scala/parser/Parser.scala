@@ -82,8 +82,8 @@ object Parser {
       // TODO - verify
       val unqualRange = (if (optionalTail.toList.flatten.isEmpty) head.range else optionalTail.toList.flatten.last.range) <-> head.range
       optionalArgs match {
-        case Some(args) => TypeRef(Unqual(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), args.map(_.swap), range)
-        case None => TypeRef(Unqual(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), List.empty, range)
+        case Some(args) => TypeRef(Ident(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), args.map(_.swap), range)
+        case None => TypeRef(Ident(head.value, optionalTail.getOrElse(List.empty).map(_.value), unqualRange), List.empty, range)
       }
     }
   }
@@ -111,7 +111,7 @@ object Parser {
       parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
       parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
       parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
-      parseIdentifier.map(tok => Unqual(tok.value, List.empty, tok.range))
+      parseIdentifier.map(tok => Ident(tok.value, List.empty, tok.range))
     )
   }
 

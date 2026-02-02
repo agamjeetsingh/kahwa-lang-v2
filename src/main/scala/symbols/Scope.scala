@@ -1,6 +1,6 @@
 package symbols
 
-import ast.Unqual
+import ast.Ident
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -17,7 +17,7 @@ class Scope {
     termSymbolTable.getOrElse(name, Nil).toList
   }
 
-  def searchForType(ident: Unqual): List[TypeSymbol] = {
+  def searchForType(ident: Ident): List[TypeSymbol] = {
     // a.b.c
     def rec(head: String, tail: List[String]): List[TypeSymbol] = {
       // head = a; tail = List(b, c)
@@ -28,7 +28,7 @@ class Scope {
             case _ => false
           } match {
             case Nil => searchInParent() // a doesn't exist in current scope
-            case h :: _ => h.scope.searchForType(Unqual(nextHead, nextTail, ident.range)) match {
+            case h :: _ => h.scope.searchForType(Ident(nextHead, nextTail, ident.range)) match {
               case Nil => searchInParent() // (b.c) didn't get resolved correctly
               case res => res // Full a.b.c got resolved
             }
@@ -45,7 +45,7 @@ class Scope {
     }
 
     ident match {
-      case Unqual(head, tail, _) => rec(head, tail)
+      case Ident(head, tail, _) => rec(head, tail)
     }
   }
 
@@ -56,7 +56,7 @@ class Scope {
       .getOrElse(Nil)).toList
   }
 
-  def searchForTerm(ident: Unqual): List[TermSymbol] = {
+  def searchForTerm(ident: Ident): List[TermSymbol] = {
     // a.b.c
     def rec(head: String, tail: List[String]): List[TermSymbol] = {
       // head = a; tail = List(b, c)
@@ -67,7 +67,7 @@ class Scope {
             case _ => false
           } match {
             case Nil => searchInParent() // a doesn't exist in current scope
-            case h :: _ => h.scope.searchForTerm(Unqual(nextHead, nextTail, ident.range)) match {
+            case h :: _ => h.scope.searchForTerm(Ident(nextHead, nextTail, ident.range)) match {
               case Nil => searchInParent() // (b.c) didn't get resolved correctly
               case res => res // Full a.b.c got resolved
             }
@@ -84,7 +84,7 @@ class Scope {
     }
 
     ident match {
-      case Unqual(head, tail, _) => rec(head, tail)
+      case Ident(head, tail, _) => rec(head, tail)
     }
   }
 

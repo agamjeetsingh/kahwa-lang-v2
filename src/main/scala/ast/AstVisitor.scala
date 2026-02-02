@@ -13,8 +13,7 @@ trait Visitor[R] {
   def visitStringLiteral(node: StringLiteral): R
 
   // ===== Identifiers =====
-  def visitUnqual(node: Unqual): R
-  def visitQual(node: Qual): R
+  def visitIdent(node: Ident): R
 
   // ===== Complex Expressions =====
   def visitBinaryExpr(node: BinaryExpr): R
@@ -59,9 +58,8 @@ extension (node: AstNode) {
     case n: NullLiteral => visitor.visitNullLiteral(n)
     case n: StringLiteral => visitor.visitStringLiteral(n)
 
-    // Identifiers (order matters: check Qual before Unqual since Qual extends Ident)
-    case n: Qual => visitor.visitQual(n)
-    case n: Unqual => visitor.visitUnqual(n)
+    // Identifiers
+    case n: Ident => visitor.visitIdent(n)
 
     // Complex Expressions
     case n: BinaryExpr => visitor.visitBinaryExpr(n)
@@ -138,8 +136,7 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
   def visitStringLiteral(node: StringLiteral): R = defaultResult
 
   // ===== Identifiers (leaves - no children to visit) =====
-  def visitUnqual(node: Unqual): R = defaultResult
-  def visitQual(node: Qual): R = defaultResult
+  def visitIdent(node: Ident): R = defaultResult
 
   // ===== Complex Expressions =====
   def visitBinaryExpr(node: BinaryExpr): R = {
