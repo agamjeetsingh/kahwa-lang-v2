@@ -82,12 +82,15 @@ object SemanticAnalyser {
 
       ts.flatMap(tuple => {
         val ((childSymbol, range), decl) = tuple
-        if (!duplicatesAllowed && ((term && parentSymbol.scope.searchForTerm(childSymbol.name).nonEmpty) || (!term && parentSymbol.scope.searchForType(childSymbol.name).nonEmpty))) {
+        val badDuplicate = !duplicatesAllowed && (
+          (term && parentSymbol.scope.searchForTerm(childSymbol.name).nonEmpty)
+            || (!term && parentSymbol.scope.searchForType(childSymbol.name).nonEmpty))
+        nodeToSymbol += decl -> childSymbol
+        if (badDuplicate) {
           List(SymbolAlreadyDeclared(childSymbol.name, range))
         } else {
           parentSymbol.scope.define(childSymbol)
           registerSymbol(childSymbol)
-          nodeToSymbol += decl -> childSymbol
           List.empty
         }
       })
