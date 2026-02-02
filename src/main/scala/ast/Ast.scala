@@ -3,7 +3,7 @@ package ast
 import sources.SourceRange
 
 import scala.annotation.targetName
-import symbols.Symbol
+import symbols.{Scope, Symbol}
 
 sealed trait AstNode extends PrettyPrintable {
   def range: SourceRange
@@ -174,6 +174,7 @@ case class ExprStmt(expr: Expr, range: SourceRange = SourceRange.dummy) extends 
 
 case class BlockStmt(stmts: List[Stmt], range: SourceRange = SourceRange.dummy) extends Stmt {
   override def prettyPrint: String = stmts.map(_.prettyPrint).mkString("{\n", "\n", "\n}\n")
+  val scope: Scope = Scope()
 }
 
 case class IfStmt(expr: Expr, ifBlock: BlockStmt, elseBlock: Option[BlockStmt] = None, range: SourceRange = SourceRange.dummy) extends Stmt {

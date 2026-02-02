@@ -1,12 +1,8 @@
 package symbols.analyser
 
-import ast.Modifier.*
 import ast.*
 import diagnostics.Diagnostic
-import diagnostics.Diagnostic.*
-import sources.SourceRange
-import symbols.AstSymbolExtensions.*
-import symbols.{ClassSymbol, FieldSymbol, FunctionSymbol, GlobalScope, MethodSymbol, Scope, SemanticType, Symbol, TranslationUnit, TypeParameterSymbol, TypedefSymbol, VariableSymbol, Visibility, VisibleVariableSymbol}
+import symbols.{Scope, Symbol, TranslationUnit}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -18,7 +14,7 @@ type NodeToScope = Map[AstNode, Scope]
 object SemanticAnalyser {
   private[analyser] type MutableNodeToSymbol = mutable.Map[Decl, Symbol]
   private type MutableIdentToSymbol = mutable.Map[Ident, Symbol]
-  private type MutableNodeToScope = mutable.Map[AstNode, Scope]
+  private[analyser] type MutableNodeToScope = mutable.Map[AstNode, Scope]
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
 
@@ -31,8 +27,8 @@ object SemanticAnalyser {
     // Phase 2: Declare all top-level functions, top-level variables, classes, fields, methods and function/method parameters
     val res = DeclareNames.declareFile(kahwaFile)
 
-    // Phase 3: Provide a scope to every single AST Node (TODO)
-    val nodeToScope: MutableNodeToScope = mutable.Map.empty
+    // Phase 3: Provide a scope to every single AST Node
+    val nodeToScope: MutableNodeToScope = AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
 
     // Phase 4: Build a map from Idents to Symbols (TODO)
     val identToSymbol: MutableIdentToSymbol = mutable.Map.empty

@@ -3,44 +3,23 @@ package ast
 /**
  * Base visitor trait for traversing AST nodes.
  * Type parameter R represents the result type returned by visit methods.
+ *
+ * This uses a hybrid approach: generalized visitExpr/visitStmt for expressions and statements
+ * (which are uniform in behavior), but specific methods for declarations (which have distinct semantics).
  */
 trait Visitor[R] {
-  // ===== Literal Expressions =====
-  def visitBoolLiteral(node: BoolLiteral): R
-  def visitFloatLiteral(node: FloatLiteral): R
-  def visitIntegerLiteral(node: IntegerLiteral): R
-  def visitNullLiteral(node: NullLiteral): R
-  def visitStringLiteral(node: StringLiteral): R
+  // Generalized for expressions and statements
+  def visitExpr(node: Expr): R
+  def visitStmt(node: Stmt): R
 
-  // ===== Identifiers =====
-  def visitIdent(node: Ident): R
-
-  // ===== Complex Expressions =====
-  def visitBinaryExpr(node: BinaryExpr): R
-  def visitUnaryExpr(node: UnaryExpr): R
-  def visitCallExpr(node: CallExpr): R
-  def visitIndexExpr(node: IndexExpr): R
-  def visitMemberAccessExpr(node: MemberAccessExpr): R
-  def visitTernaryExpr(node: TernaryExpr): R
-
-  // ===== Statements =====
-  def visitBreakStmt(node: BreakStmt): R
-  def visitContinueStmt(node: ContinueStmt): R
-  def visitExprStmt(node: ExprStmt): R
-  def visitBlockStmt(node: BlockStmt): R
-  def visitIfStmt(node: IfStmt): R
-  def visitReturnStmt(node: ReturnStmt): R
-  def visitWhileStmt(node: WhileStmt): R
-  def visitVariableDeclStmt(node: VariableDeclStmt): R
-
-  // ===== Declarations =====
+  // Specific for declarations (they have distinct semantic meanings)
   def visitTypedefDecl(node: TypedefDecl): R
   def visitVariableDecl(node: VariableDecl): R
   def visitTypeParameterDecl(node: TypeParameterDecl): R
   def visitFunctionDecl(node: FunctionDecl): R
   def visitClassDecl(node: ClassDecl): R
 
-  // ===== Other Nodes =====
+  // Other nodes
   def visitTypeRef(node: TypeRef): R
   def visitModifierNode(node: ModifierNode): R
   def visitKahwaFile(node: KahwaFile): R
@@ -51,35 +30,14 @@ trait Visitor[R] {
  */
 extension (node: AstNode) {
   def accept[R](visitor: Visitor[R]): R = node match {
-    // Literals
-    case n: BoolLiteral => visitor.visitBoolLiteral(n)
-    case n: FloatLiteral => visitor.visitFloatLiteral(n)
-    case n: IntegerLiteral => visitor.visitIntegerLiteral(n)
-    case n: NullLiteral => visitor.visitNullLiteral(n)
-    case n: StringLiteral => visitor.visitStringLiteral(n)
+    // KahwaFile (must come first since it extends Decl)
+    case n: KahwaFile => visitor.visitKahwaFile(n)
 
-    // Identifiers
-    case n: Ident => visitor.visitIdent(n)
+    // Generalized for expressions and statements
+    case n: Expr => visitor.visitExpr(n)
+    case n: Stmt => visitor.visitStmt(n)
 
-    // Complex Expressions
-    case n: BinaryExpr => visitor.visitBinaryExpr(n)
-    case n: UnaryExpr => visitor.visitUnaryExpr(n)
-    case n: CallExpr => visitor.visitCallExpr(n)
-    case n: IndexExpr => visitor.visitIndexExpr(n)
-    case n: MemberAccessExpr => visitor.visitMemberAccessExpr(n)
-    case n: TernaryExpr => visitor.visitTernaryExpr(n)
-
-    // Statements
-    case n: BreakStmt => visitor.visitBreakStmt(n)
-    case n: ContinueStmt => visitor.visitContinueStmt(n)
-    case n: ExprStmt => visitor.visitExprStmt(n)
-    case n: BlockStmt => visitor.visitBlockStmt(n)
-    case n: IfStmt => visitor.visitIfStmt(n)
-    case n: ReturnStmt => visitor.visitReturnStmt(n)
-    case n: WhileStmt => visitor.visitWhileStmt(n)
-    case n: VariableDeclStmt => visitor.visitVariableDeclStmt(n)
-
-    // Declarations
+    // Specific for declarations
     case n: TypedefDecl => visitor.visitTypedefDecl(n)
     case n: VariableDecl => visitor.visitVariableDecl(n)
     case n: TypeParameterDecl => visitor.visitTypeParameterDecl(n)
@@ -89,13 +47,12 @@ extension (node: AstNode) {
     // Other nodes
     case n: TypeRef => visitor.visitTypeRef(n)
     case n: ModifierNode => visitor.visitModifierNode(n)
-    case n: KahwaFile => visitor.visitKahwaFile(n)
   }
 }
 
 /**
- * A base visitor implementation that automatically traverses all child nodes.
- * Override specific visit methods to customize behavior for particular node types.
+ * A base visitor implementation that automatically traverses all child nodes using pattern matching.
+ * Override the general visit methods (visitExpr, visitStmt, visitDecl) to customize behavior.
  *
  * Subclasses must implement:
  * - defaultResult: The default value to return when visiting leaf nodes
@@ -128,79 +85,69 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     nodeOpt.map(_.accept(this)).getOrElse(defaultResult)
   }
 
-  // ===== Literal Expressions (leaves - no children to visit) =====
-  def visitBoolLiteral(node: BoolLiteral): R = defaultResult
-  def visitFloatLiteral(node: FloatLiteral): R = defaultResult
-  def visitIntegerLiteral(node: IntegerLiteral): R = defaultResult
-  def visitNullLiteral(node: NullLiteral): R = defaultResult
-  def visitStringLiteral(node: StringLiteral): R = defaultResult
+  // ===== Expressions =====
+  def visitExpr(node: Expr): R = node match {
+    case n: BinaryExpr =>
+      val r1 = n.expr1.accept(this)
+      val r2 = n.expr2.accept(this)
+      combine(r1, r2)
 
-  // ===== Identifiers (leaves - no children to visit) =====
-  def visitIdent(node: Ident): R = defaultResult
+    case n: UnaryExpr =>
+      n.expr.accept(this)
 
-  // ===== Complex Expressions =====
-  def visitBinaryExpr(node: BinaryExpr): R = {
-    val r1 = node.expr1.accept(this)
-    val r2 = node.expr2.accept(this)
-    combine(r1, r2)
-  }
+    case n: CallExpr =>
+      val r1 = n.callee.accept(this)
+      val r2 = visitList(n.args)
+      combine(r1, r2)
 
-  def visitUnaryExpr(node: UnaryExpr): R = {
-    node.expr.accept(this)
-  }
+    case n: IndexExpr =>
+      val r1 = n.callee.accept(this)
+      val r2 = n.arg.accept(this)
+      combine(r1, r2)
 
-  def visitCallExpr(node: CallExpr): R = {
-    val r1 = node.callee.accept(this)
-    val r2 = visitList(node.args)
-    combine(r1, r2)
-  }
+    case n: MemberAccessExpr =>
+      n.base.accept(this)
 
-  def visitIndexExpr(node: IndexExpr): R = {
-    val r1 = node.callee.accept(this)
-    val r2 = node.arg.accept(this)
-    combine(r1, r2)
-  }
+    case n: TernaryExpr =>
+      val r1 = n.cond.accept(this)
+      val r2 = n.expr1.accept(this)
+      val r3 = n.expr2.accept(this)
+      combine(combine(r1, r2), r3)
 
-  def visitMemberAccessExpr(node: MemberAccessExpr): R = node.base.accept(this)
-
-  def visitTernaryExpr(node: TernaryExpr): R = {
-    val r1 = node.cond.accept(this)
-    val r2 = node.expr1.accept(this)
-    val r3 = node.expr2.accept(this)
-    combine(combine(r1, r2), r3)
+    // Leaf nodes (literals and identifiers)
+    case _: Ident | _: BoolLiteral | _: FloatLiteral |
+         _: IntegerLiteral | _: NullLiteral | _: StringLiteral =>
+      defaultResult
   }
 
   // ===== Statements =====
-  def visitBreakStmt(node: BreakStmt): R = defaultResult
-  def visitContinueStmt(node: ContinueStmt): R = defaultResult
+  def visitStmt(node: Stmt): R = node match {
+    case n: BlockStmt =>
+      visitList(n.stmts)
 
-  def visitExprStmt(node: ExprStmt): R = {
-    node.expr.accept(this)
-  }
+    case n: ExprStmt =>
+      n.expr.accept(this)
 
-  def visitBlockStmt(node: BlockStmt): R = {
-    visitList(node.stmts)
-  }
+    case n: IfStmt =>
+      val r1 = n.expr.accept(this)
+      val r2 = n.ifBlock.accept(this)
+      val r3 = visitOption(n.elseBlock)
+      combine(combine(r1, r2), r3)
 
-  def visitIfStmt(node: IfStmt): R = {
-    val r1 = node.expr.accept(this)
-    val r2 = node.ifBlock.accept(this)
-    val r3 = visitOption(node.elseBlock)
-    combine(combine(r1, r2), r3)
-  }
+    case n: ReturnStmt =>
+      n.expr.accept(this)
 
-  def visitReturnStmt(node: ReturnStmt): R = {
-    node.expr.accept(this)
-  }
+    case n: WhileStmt =>
+      val r1 = n.cond.accept(this)
+      val r2 = n.body.accept(this)
+      combine(r1, r2)
 
-  def visitWhileStmt(node: WhileStmt): R = {
-    val r1 = node.cond.accept(this)
-    val r2 = node.body.accept(this)
-    combine(r1, r2)
-  }
+    case n: VariableDeclStmt =>
+      n.variableDecl.accept(this)
 
-  def visitVariableDeclStmt(node: VariableDeclStmt): R = {
-    node.variableDecl.accept(this)
+    // Leaf nodes
+    case _: BreakStmt | _: ContinueStmt =>
+      defaultResult
   }
 
   // ===== Declarations =====
