@@ -26,7 +26,7 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
   }
 }
 
-class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
+sealed class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
 sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 

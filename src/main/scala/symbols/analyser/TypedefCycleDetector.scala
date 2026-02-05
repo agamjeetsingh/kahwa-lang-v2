@@ -3,8 +3,7 @@ package symbols.analyser
 import ast.TypedefDecl
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.TypedefCycleDetected
-import sources.SourceRange
-import symbols.{ClassSymbol, SemanticType, TermSymbol, TranslationUnit, TypeParameterSymbol, TypeSymbol, TypedefSymbol}
+import symbols.TypedefSymbol
 import symbols.analyser.SemanticAnalyser.MutableNodeToSymbol
 
 import scala.collection.mutable

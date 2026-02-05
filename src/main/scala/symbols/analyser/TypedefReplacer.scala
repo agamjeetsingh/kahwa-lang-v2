@@ -1,15 +1,15 @@
 package symbols.analyser
 
-import ast.{AstTransformer, TypeRef}
+import ast.{AstTransformer, TypeRef, TypedefDecl}
+import symbols.TypeSymbol
+import symbols.analyser.SemanticAnalyser.MutableTypeRefToSemanticType
 
-private class TypedefReplacer(typedefMap: Map[String, TypeRef]) extends AstTransformer {
+private class TypedefReplacer(allTypedefs: List[TypedefDecl], typeRefToSymbol: MutableTypeRefToSemanticType) extends AstTransformer {
   override def transform(typeRef: TypeRef): TypeRef = {
-    // Look up the name in the typedef map
-    // TODO
-    typedefMap.get(typeRef.name.head) match {
-      case Some(targetType) =>
+    typeRefToSymbol.get(typeRef) match {
+      case Some(semanticType) => ???
         // Found a typedef! Replace it and recurse (for typedef chains)
-        transform(targetType.copy(range = typeRef.range))
+//        transform(targetType.copy(range = typeRef.range))
       case None =>
         // Not a typedef, but still recurse into generic arguments
         super.transform(typeRef)

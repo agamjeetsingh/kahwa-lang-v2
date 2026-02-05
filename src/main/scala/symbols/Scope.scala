@@ -117,5 +117,6 @@ class Scope {
 }
 
 object GlobalScope extends Scope {
-  val ErrorType: SemanticType = SemanticType(TypeSymbol("Error-Type", GlobalScope), List.empty)
+  val ErrorTypeSymbol: TypeSymbol = TypeSymbol("Error-Type", GlobalScope)
+  val ErrorType: SemanticType = SemanticType(ErrorTypeSymbol)
 }

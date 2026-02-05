@@ -2,7 +2,7 @@ package symbols.analyser
 
 import ast.*
 import diagnostics.Diagnostic
-import symbols.{Scope, Symbol, TranslationUnit}
+import symbols.{Scope, SemanticType, Symbol, TranslationUnit, TypeSymbol}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -15,6 +15,7 @@ object SemanticAnalyser {
   private[analyser] type MutableNodeToSymbol = mutable.Map[Decl, Symbol]
   private[analyser] type MutableIdentToSymbol = mutable.Map[Ident, Symbol]
   private[analyser] type MutableNodeToScope = mutable.Map[AstNode, Scope]
+  private[analyser] type MutableTypeRefToSemanticType = mutable.Map[TypeRef, SemanticType]
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
 
@@ -29,15 +30,15 @@ object SemanticAnalyser {
 
     // Phase 3: Provide a scope to every single AST Node
     val nodeToScope: MutableNodeToScope = AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
+
+    // Phase 4: Build a map from TypeRefs to Symbols (TODO)
+    val typeRefToSymbol: MutableTypeRefToSemanticType = TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(kahwaFile)
     
-    // Phase 4: Detect cycles in the typedefs (TODO)
+    // Phase 5: Detect cycles in the typedefs (TODO)
     diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
 
-    // Phase 5: Replace each type def with the right type (TODO)
-    //    kahwaFile = TypedefReplacer(res.typedefs.toList).transform(kahwaFile)
-
-    // Phase 6: Build a map from Idents to Symbols (TODO)
-    val identToSymbol: MutableIdentToSymbol = mutable.Map.empty
+    // Phase 6: Replace each type def with the right type (TODO)
+    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol).transform(kahwaFile)
 
     // Phase 7: Resolve all typeRefs to semantic types except for the ones in method bodies
     // TODO - Can be simplified a lot by using the nodeToScope map
