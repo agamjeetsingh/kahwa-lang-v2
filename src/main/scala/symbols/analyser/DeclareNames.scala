@@ -8,6 +8,7 @@ import sources.SourceRange
 import symbols.{ClassSymbol, FieldSymbol, FunctionSymbol, MethodSymbol, Scope, Symbol, TranslationUnit, TypeParameterSymbol, TypedefSymbol, VariableSymbol, Visibility, VisibleVariableSymbol}
 import symbols.analyser.SemanticAnalyser.MutableNodeToSymbol
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 private object DeclareNames {
@@ -247,35 +248,13 @@ private object DeclareNames {
     var protectedFound = false
     var privateFound = false
 
-    modifiers.foreach(modifierNode => modifierNode.modifier match {
-      case Modifier.PUBLIC => {
-        if ((!topLevel && protectedFound) || privateFound) {
-          diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PRIVATE, PUBLIC, modifierNode.range)
-        } else if (publicFound) {
-          diagnostics += RepeatedModifier(PUBLIC, modifierNode.range)
-        }
-        publicFound = true
-      }
-      case Modifier.PRIVATE => {
-        if ((!topLevel && protectedFound) || publicFound) {
-          diagnostics += IllegalModifierCombination(if (protectedFound) PROTECTED else PUBLIC, PRIVATE, modifierNode.range)
-        } else if (privateFound) {
-          diagnostics += RepeatedModifier(PRIVATE, modifierNode.range)
-        }
-        privateFound = true
-      }
-      case Modifier.PROTECTED => {
-        if (topLevel) {
-          diagnostics += ModifierNotAllowed(PROTECTED, modifierNode.range)
-        } else if (publicFound || privateFound) {
-          diagnostics += IllegalModifierCombination(if (publicFound) PUBLIC else PRIVATE, PROTECTED, modifierNode.range)
-        } else if (protectedFound) {
-          diagnostics += RepeatedModifier(PROTECTED, modifierNode.range)
-        }
-        protectedFound = true
-      }
-      case _ => throw IllegalStateException("Should be unreachable")
-    })
+    diagnostics ++= repeatedModifiers(modifiers)
+
+    diagnostics ++= illegalCombinations(modifiers, Map(
+      Modifier.PUBLIC -> Set(Modifier.PRIVATE, Modifier.PROTECTED),
+      Modifier.PRIVATE -> Set(Modifier.PUBLIC, Modifier.PROTECTED),
+      Modifier.PROTECTED -> Set(Modifier.PUBLIC, Modifier.PRIVATE)
+    ))
 
     res
   }
@@ -301,28 +280,13 @@ private object DeclareNames {
       Modifier.FINAL
     }
 
-    var finalFound = false
-    var openFound = false
-    var abstractFound = false
+    diagnostics ++= illegalCombinations(modifiers, Map(
+      Modifier.OPEN -> Set(Modifier.FINAL),
+      Modifier.FINAL -> Set(Modifier.ABSTRACT, Modifier.OPEN),
+      Modifier.ABSTRACT -> Set(Modifier.FINAL)
+    ))
 
-    modifiers.foreach(modifierNode => modifierNode.modifier match {
-      case Modifier.OPEN => {
-        if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.OPEN, modifierNode.range)
-        else if (openFound) diagnostics += RepeatedModifier(Modifier.OPEN, modifierNode.range)
-        openFound = true
-      }
-      case Modifier.FINAL => {
-        if (abstractFound || openFound) diagnostics += IllegalModifierCombination(if (abstractFound) Modifier.ABSTRACT else Modifier.OPEN, Modifier.FINAL, modifierNode.range)
-        else if (finalFound) diagnostics += RepeatedModifier(Modifier.FINAL, modifierNode.range)
-        finalFound = true
-      }
-      case Modifier.ABSTRACT => {
-        if (finalFound) diagnostics += IllegalModifierCombination(Modifier.FINAL, Modifier.ABSTRACT, modifierNode.range)
-        else if (abstractFound) diagnostics += RepeatedModifier(Modifier.ABSTRACT, modifierNode.range)
-        abstractFound = true
-      }
-      case _ => throw IllegalStateException("Should be unreachable")
-    })
+    diagnostics ++= repeatedModifiers(modifiers)
 
     res
   }
@@ -338,5 +302,26 @@ private object DeclareNames {
       }
     })
     found
+  }
+
+  private def repeatedModifiers(modifiers: List[ModifierNode]): List[Diagnostic] = {
+    val found = mutable.Set[Modifier]()
+    val diagnostics = ListBuffer[Diagnostic]()
+    modifiers.foreach { modifierNode =>
+      if (found.contains(modifierNode.modifier)) diagnostics += RepeatedModifier(modifierNode.modifier, modifierNode.range)
+      found += modifierNode.modifier
+    }
+    diagnostics.toList
+  }
+
+  private def illegalCombinations(modifiers: List[ModifierNode], modifierPairs: Map[Modifier, Set[Modifier]]): List[Diagnostic] = {
+    val found = mutable.Set[Modifier]()
+    val diagnostics = ListBuffer[Diagnostic]()
+    modifiers.foreach { modifierNode =>
+      val illegalCombinations = modifierPairs.getOrElse(modifierNode.modifier, Set.empty) intersect found
+      illegalCombinations.foreach(diagnostics += IllegalModifierCombination(modifierNode.modifier, _, modifierNode.range))
+      found += modifierNode.modifier
+    }
+    diagnostics.toList
   }
 }
