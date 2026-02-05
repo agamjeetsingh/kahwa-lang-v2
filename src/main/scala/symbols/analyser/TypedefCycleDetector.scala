@@ -4,6 +4,7 @@ import ast.TypedefDecl
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.TypedefCycleDetected
 import sources.SourceRange
+import symbols.{ClassSymbol, SemanticType, TermSymbol, TranslationUnit, TypeParameterSymbol, TypeSymbol, TypedefSymbol}
 import symbols.analyser.SemanticAnalyser.MutableNodeToSymbol
 
 import scala.collection.mutable
@@ -11,40 +12,50 @@ import scala.collection.mutable.ListBuffer
 
 private object TypedefCycleDetector {
   def detectCycles(allTypedefs: List[TypedefDecl])(using nodeToSymbol: MutableNodeToSymbol): List[Diagnostic] = {
-    val visited = mutable.Set[String]()
-    val visiting = mutable.Set[String]()
+    val visited = mutable.Set[TypedefSymbol]()
+    val visiting = mutable.Set[TypedefSymbol]()
     val diagnostics = ListBuffer[Diagnostic]()
 
-    def dfs(typedefName: String, path: List[String]): Unit = {
-      if (visiting.contains(typedefName)) {
-        diagnostics += TypedefCycleDetected(path.reverse, SourceRange.dummy) // TODO - Source range
+    val typedefSymbolToNode = allTypedefs.collect {
+      typedefDecl =>
+        nodeToSymbol(typedefDecl) match {
+          case typedefSymbol: TypedefSymbol => typedefSymbol -> typedefDecl
+        }
+    }.toMap
+
+    def dfs(typedefSymbol: TypedefSymbol, path: List[TypedefSymbol]): Unit = {
+      if (visiting.contains(typedefSymbol)) {
+        diagnostics += TypedefCycleDetected(
+          path.reverse.map(typedefSymbolToNode.apply).map(_.prettyPrint),
+          typedefSymbolToNode(typedefSymbol).range
+        )
         return
       }
-      if (visited.contains(typedefName)) return
+      if (visited.contains(typedefSymbol)) return
 
-      visiting += typedefName
-      // Get all typedef dependencies
-      for (dep <- getTypedefDependencies(typedefName, allTypedefs)) {
-        dfs(dep, typedefName :: path)
+      visiting += typedefSymbol
+      for (dep <- getTypedefDependencies(typedefSymbol)) {
+        dfs(dep, typedefSymbol :: path)
       }
-      visiting -= typedefName
-      visited += typedefName
+      visiting -= typedefSymbol
+      visited += typedefSymbol
     }
 
-    allTypedefs.foreach(td => dfs(td.name, List(td.name)))
+    allTypedefs.collect { typedefDecl =>
+      nodeToSymbol(typedefDecl) match {
+        case typedefSymbol: TypedefSymbol => typedefSymbol
+      }
+    }.foreach(td => dfs(td, List(td)))
     diagnostics.toList
   }
 
-  private def getTypedefDependencies(name: String, allTypedefs: List[TypedefDecl])(using nodeToSymbol: MutableNodeToSymbol): List[String] = {
-    allTypedefs.collect {
-      case typedefDecl if nodeToSymbol.contains(typedefDecl) => typedefDecl
-    }.find(_.name == name) match {
-      case Some(typedefDecl) => {
-        val typeRef = typedefDecl.referredType
-        // TODO
-        typeRef.name.prettyPrint :: typeRef.args.map(_._1.name.prettyPrint)
-      }
-      case None => List.empty
-    }
+  private def getTypedefDependencies(typedefSymbol: TypedefSymbol)(using nodeToSymbol: MutableNodeToSymbol): List[TypedefSymbol] = {
+    val semanticType = typedefSymbol.referredType
+    (semanticType.typeSymbol match {
+      case typedefSymbol: TypedefSymbol => List(typedefSymbol)
+      case _ => List.empty
+    }) ++ semanticType.genericArguments.collect { arg => arg.typeSymbol match {
+      case typedefSymbol: TypedefSymbol => typedefSymbol
+    }}.flatMap(getTypedefDependencies)
   }
 }

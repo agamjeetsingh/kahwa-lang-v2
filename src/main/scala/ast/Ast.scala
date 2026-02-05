@@ -334,6 +334,6 @@ case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
   override def prettyPrint: String
   = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}\n${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
 
-  override val name: String = ???
+  override val name: String = "dummy"
   override val modifiers: List[ModifierNode] = List.empty
 }
