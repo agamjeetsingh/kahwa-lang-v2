@@ -28,18 +28,26 @@ class Scope {
             case _ => false
           } match {
             case Nil => searchInParent() // a doesn't exist in current scope
-            case h :: _ => h.scope.searchForType(Ident(nextHead, nextTail, ident.range)) match {
-              case Nil => searchInParent() // (b.c) didn't get resolved correctly
-              case res => res // Full a.b.c got resolved
-            }
+            case h :: _ =>
+              h.scope.searchForType(
+                Ident(nextHead, nextTail, ident.range)
+              ) match {
+                case Nil =>
+                  searchInParent() // (b.c) didn't get resolved correctly
+                case res => res // Full a.b.c got resolved
+              }
           }
         }
-        case Nil => typeSymbolTable.getOrElse(head, searchInParent()).toList // There is no tail (just a), check directly
+        case Nil =>
+          typeSymbolTable
+            .getOrElse(head, searchInParent())
+            .toList // There is no tail (just a), check directly
       }
     }
 
     def searchInParent(): List[TypeSymbol] = {
-      outerScopes.iterator.map(_.searchForType(ident))
+      outerScopes.iterator
+        .map(_.searchForType(ident))
         .find(_.nonEmpty)
         .getOrElse(Nil)
     }
@@ -50,10 +58,15 @@ class Scope {
   }
 
   def searchForType(name: String): List[TypeSymbol] = {
-    typeSymbolTable.getOrElse(name, outerScopes.iterator
-      .map(_.searchForType(name))
-      .find(_.nonEmpty)
-      .getOrElse(Nil)).toList
+    typeSymbolTable
+      .getOrElse(
+        name,
+        outerScopes.iterator
+          .map(_.searchForType(name))
+          .find(_.nonEmpty)
+          .getOrElse(Nil)
+      )
+      .toList
   }
 
   def searchForTerm(ident: Ident): List[TermSymbol] = {
@@ -67,18 +80,26 @@ class Scope {
             case _ => false
           } match {
             case Nil => searchInParent() // a doesn't exist in current scope
-            case h :: _ => h.scope.searchForTerm(Ident(nextHead, nextTail, ident.range)) match {
-              case Nil => searchInParent() // (b.c) didn't get resolved correctly
-              case res => res // Full a.b.c got resolved
-            }
+            case h :: _ =>
+              h.scope.searchForTerm(
+                Ident(nextHead, nextTail, ident.range)
+              ) match {
+                case Nil =>
+                  searchInParent() // (b.c) didn't get resolved correctly
+                case res => res // Full a.b.c got resolved
+              }
           }
         }
-        case Nil => termSymbolTable.getOrElse(head, searchInParent()).toList // There is no tail (just a), check directly
+        case Nil =>
+          termSymbolTable
+            .getOrElse(head, searchInParent())
+            .toList // There is no tail (just a), check directly
       }
     }
 
     def searchInParent(): List[TermSymbol] = {
-      outerScopes.iterator.map(_.searchForTerm(ident))
+      outerScopes.iterator
+        .map(_.searchForTerm(ident))
         .find(_.nonEmpty)
         .getOrElse(Nil)
     }
@@ -89,16 +110,23 @@ class Scope {
   }
 
   def searchForTerm(name: String): List[TermSymbol] = {
-    termSymbolTable.getOrElse(name, outerScopes.iterator
-      .map(_.searchForTerm(name))
-      .find(_.nonEmpty)
-      .getOrElse(Nil)).toList
+    termSymbolTable
+      .getOrElse(
+        name,
+        outerScopes.iterator
+          .map(_.searchForTerm(name))
+          .find(_.nonEmpty)
+          .getOrElse(Nil)
+      )
+      .toList
   }
 
   def define(symbol: Symbol): Unit = {
     symbol match {
-      case symbol: TypeSymbol => typeSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
-      case symbol: TermSymbol => termSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
+      case symbol: TypeSymbol =>
+        typeSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
+      case symbol: TermSymbol =>
+        termSymbolTable.getOrElseUpdate(symbol.name, ListBuffer.empty) += symbol
     }
   }
 

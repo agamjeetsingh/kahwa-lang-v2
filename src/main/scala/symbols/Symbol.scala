@@ -30,7 +30,11 @@ sealed class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
 sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
-class TypeParameterSymbol(override val name: String, outerScope: Scope, variance: Variance = INVARIANT) extends TypeSymbol(name, outerScope)
+class TypeParameterSymbol(
+    override val name: String,
+    outerScope: Scope,
+    variance: Variance = INVARIANT
+) extends TypeSymbol(name, outerScope)
 
 sealed trait Modal {
   var isAbstract: Boolean = false
@@ -98,4 +102,7 @@ class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSy
   var visibility: Visibility = Visibility.default
 }
 
-case class SemanticType(typeSymbol: TypeSymbol, genericArguments: List[SemanticType] = List.empty)
+case class SemanticType(
+    typeSymbol: TypeSymbol,
+    genericArguments: List[SemanticType] = List.empty
+)

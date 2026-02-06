@@ -10,13 +10,16 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object Tokeniser {
-  case class TokeniserConfig(delimiters: List[Char],
-                             exactTokens: Map[String, SourceRange => Token],
-                             keywords: Map[String, SourceRange => Token]) {
+  case class TokeniserConfig(
+      delimiters: List[Char],
+      exactTokens: Map[String, SourceRange => Token],
+      keywords: Map[String, SourceRange => Token]
+  ) {
     // Preprocess for efficient matching
     private[Tokeniser] lazy val delimiterSet: Set[Char] = delimiters.toSet
     private[Tokeniser] lazy val exactTokensByLength: TreeMap[Int, Map[String, SourceRange => Token]] =
-      TreeMap.from(exactTokens.groupBy(_._1.length))(using Ordering[Int].reverse)
+      TreeMap
+        .from(exactTokens.groupBy(_._1.length))(using Ordering[Int].reverse)
   }
 
   private val config = TokeniserConfig(
@@ -93,7 +96,11 @@ object Tokeniser {
     )
   )
 
-  def tokenise(string: String, fileId: Int, tokeniserConfig: TokeniserConfig = config): (Input[Token], List[Diagnostic]) = {
+  def tokenise(
+      string: String,
+      fileId: Int,
+      tokeniserConfig: TokeniserConfig = config
+  ): (Input[Token], List[Diagnostic]) = {
     var idx = 0
 
     val exactTokens = tokeniserConfig.exactTokensByLength
@@ -124,7 +131,11 @@ object Tokeniser {
               idx = startIdx + 2
               var foundEnd = false
               while (idx < string.length && !foundEnd) {
-                if (string(idx) == '*' && idx + 1 < string.length && string(idx + 1) == '/') {
+                if (
+                  string(idx) == '*' && idx + 1 < string.length && string(
+                    idx + 1
+                  ) == '/'
+                ) {
                   idx += 2
                   foundEnd = true
                 } else {
@@ -134,7 +145,7 @@ object Tokeniser {
               isComment = true
 
             case _ =>
-              // Not a comment, continue to token matching
+            // Not a comment, continue to token matching
           }
         }
 
@@ -145,7 +156,9 @@ object Tokeniser {
           while (iter.hasNext && !matched) {
             val (length, tokCandidates) = iter.next()
             if (startIdx + length <= string.length) {
-              tokCandidates.get(string.slice(startIdx, startIdx + length)) match {
+              tokCandidates.get(
+                string.slice(startIdx, startIdx + length)
+              ) match {
                 case Some(rangeToToken) =>
                   tokens += rangeToToken(SourceRange(fileId, startIdx, length))
                   idx = startIdx + length
@@ -168,11 +181,19 @@ object Tokeniser {
                 }
                 if (idx < string.length) {
                   idx += 1 // Skip closing quote
-                  tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
+                  tokens += Token.StringLiteral(
+                    sb.toString,
+                    SourceRange(fileId, startIdx, idx - startIdx)
+                  )
                 } else {
                   // Unclosed string literal - still add it with what we have
-                  tokens += Token.StringLiteral(sb.toString, SourceRange(fileId, startIdx, idx - startIdx))
-                  diagnostics += UnterminatedStringLiteral(SourceRange(fileId, startIdx))
+                  tokens += Token.StringLiteral(
+                    sb.toString,
+                    SourceRange(fileId, startIdx, idx - startIdx)
+                  )
+                  diagnostics += UnterminatedStringLiteral(
+                    SourceRange(fileId, startIdx)
+                  )
                 }
 
               case '\'' =>
@@ -183,14 +204,23 @@ object Tokeniser {
                   idx += 1
                   if (idx < string.length && string(idx) == '\'') {
                     idx += 1
-                    tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
+                    tokens += Token.CharLiteral(
+                      ch,
+                      SourceRange(fileId, startIdx, idx - startIdx)
+                    )
                   } else {
                     // Unclosed char literal
-                    tokens += Token.CharLiteral(ch, SourceRange(fileId, startIdx, idx - startIdx))
+                    tokens += Token.CharLiteral(
+                      ch,
+                      SourceRange(fileId, startIdx, idx - startIdx)
+                    )
                   }
                 } else {
                   // Empty char literal
-                  diagnostics += UnrecognisedToken("'", SourceRange(fileId, startIdx, 1))
+                  diagnostics += UnrecognisedToken(
+                    "'",
+                    SourceRange(fileId, startIdx, 1)
+                  )
                 }
 
               case c if c.isDigit =>
@@ -199,31 +229,55 @@ object Tokeniser {
                   idx += 1
                 }
                 // Check for float (digit after dot required)
-                if (idx < string.length && string(idx) == '.' && idx + 1 < string.length && string(idx + 1).isDigit) {
+                if (
+                  idx < string.length && string(
+                    idx
+                  ) == '.' && idx + 1 < string.length && string(idx + 1).isDigit
+                ) {
                   idx += 1 // Skip dot
                   while (idx < string.length && string(idx).isDigit) {
                     idx += 1
                   }
                   val value: Float = string.slice(startIdx, idx).toFloat
-                  tokens += Token.FloatLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
+                  tokens += Token.FloatLiteral(
+                    value,
+                    SourceRange(fileId, startIdx, idx - startIdx)
+                  )
                 } else {
                   val value: Int = string.slice(startIdx, idx).toInt
-                  tokens += Token.IntegerLiteral(value, SourceRange(fileId, startIdx, idx - startIdx))
+                  tokens += Token.IntegerLiteral(
+                    value,
+                    SourceRange(fileId, startIdx, idx - startIdx)
+                  )
                 }
 
               case c if c.isLetter || c == '_' =>
                 // Parse identifier or keyword
-                while (idx < string.length && (string(idx).isLetterOrDigit || string(idx) == '_')) {
+                while (
+                  idx < string.length && (string(idx).isLetterOrDigit || string(
+                    idx
+                  ) == '_')
+                ) {
                   idx += 1
                 }
                 val text = string.slice(startIdx, idx)
                 tokens += (tokeniserConfig.keywords.get(text) match {
-                  case Some(keywordConstructor) => keywordConstructor(SourceRange(fileId, startIdx, idx - startIdx))
-                  case None => Token.Identifier(text, SourceRange(fileId, startIdx, idx - startIdx))
+                  case Some(keywordConstructor) =>
+                    keywordConstructor(
+                      SourceRange(fileId, startIdx, idx - startIdx)
+                    )
+                  case None =>
+                    Token.Identifier(
+                      text,
+                      SourceRange(fileId, startIdx, idx - startIdx)
+                    )
                 })
 
               case c =>
-                diagnostics += UnrecognisedToken(c.toString, SourceRange(fileId, startIdx))
+                diagnostics += UnrecognisedToken(
+                  c.toString,
+                  SourceRange(fileId, startIdx)
+                )
                 idx += 1
             }
           }

@@ -79,10 +79,13 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     val Override = Token.Override(SourceRange.dummy)
 
     def Identifier(value: String) = Token.Identifier(value, SourceRange.dummy)
-    def StringLiteral(value: String) = Token.StringLiteral(value, SourceRange.dummy)
+    def StringLiteral(value: String) =
+      Token.StringLiteral(value, SourceRange.dummy)
     def CharLiteral(value: Char) = Token.CharLiteral(value, SourceRange.dummy)
-    def IntegerLiteral(value: Int) = Token.IntegerLiteral(value, SourceRange.dummy)
-    def FloatLiteral(value: Float) = Token.FloatLiteral(value, SourceRange.dummy)
+    def IntegerLiteral(value: Int) =
+      Token.IntegerLiteral(value, SourceRange.dummy)
+    def FloatLiteral(value: Float) =
+      Token.FloatLiteral(value, SourceRange.dummy)
   }
 
   import TestTokens._
@@ -109,7 +112,7 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     ("|", BitwiseOr),
     ("^", BitwiseXor),
     ("?", Question),
-    (".", Dot),
+    (".", Dot)
   )
 
   val keywordTokens: List[(String, Token)] = List(
@@ -135,84 +138,87 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     ("typedef", Typedef),
     ("in", In),
     ("out", Out),
-    ("override", Override),
+    ("override", Override)
   )
 
   // Helper to check if two tokens match (ignoring source range)
-  def tokenMatches(actual: Token, expected: Token): Boolean = (actual, expected) match {
-    case (_: Token.Colon, _: Token.Colon) => true
-    case (_: Token.SemiColon, _: Token.SemiColon) => true
-    case (_: Token.Comma, _: Token.Comma) => true
-    case (_: Token.LeftCurlyBrace, _: Token.LeftCurlyBrace) => true
-    case (_: Token.RightCurlyBrace, _: Token.RightCurlyBrace) => true
-    case (_: Token.LeftParen, _: Token.LeftParen) => true
-    case (_: Token.RightParen, _: Token.RightParen) => true
-    case (_: Token.LeftBracket, _: Token.LeftBracket) => true
-    case (_: Token.RightBracket, _: Token.RightBracket) => true
-    case (_: Token.Equals, _: Token.Equals) => true
-    case (_: Token.DoubleEquals, _: Token.DoubleEquals) => true
-    case (_: Token.Less, _: Token.Less) => true
-    case (_: Token.Greater, _: Token.Greater) => true
-    case (_: Token.LessEquals, _: Token.LessEquals) => true
-    case (_: Token.GreaterEquals, _: Token.GreaterEquals) => true
-    case (_: Token.Not, _: Token.Not) => true
-    case (_: Token.NotEquals, _: Token.NotEquals) => true
-    case (_: Token.Plus, _: Token.Plus) => true
-    case (_: Token.Minus, _: Token.Minus) => true
-    case (_: Token.Star, _: Token.Star) => true
-    case (_: Token.Slash, _: Token.Slash) => true
-    case (_: Token.Modulo, _: Token.Modulo) => true
-    case (_: Token.PlusEquals, _: Token.PlusEquals) => true
-    case (_: Token.MinusEquals, _: Token.MinusEquals) => true
-    case (_: Token.StarEquals, _: Token.StarEquals) => true
-    case (_: Token.SlashEquals, _: Token.SlashEquals) => true
-    case (_: Token.ModuloEquals, _: Token.ModuloEquals) => true
-    case (_: Token.LeftShiftEquals, _: Token.LeftShiftEquals) => true
-    case (_: Token.RightShiftEquals, _: Token.RightShiftEquals) => true
-    case (_: Token.BitwiseAndEquals, _: Token.BitwiseAndEquals) => true
-    case (_: Token.BitwiseOrEquals, _: Token.BitwiseOrEquals) => true
-    case (_: Token.BitwiseXorEquals, _: Token.BitwiseXorEquals) => true
-    case (_: Token.Increment, _: Token.Increment) => true
-    case (_: Token.Decrement, _: Token.Decrement) => true
-    case (_: Token.LogicalAnd, _: Token.LogicalAnd) => true
-    case (_: Token.LogicalOr, _: Token.LogicalOr) => true
-    case (_: Token.BitwiseAnd, _: Token.BitwiseAnd) => true
-    case (_: Token.BitwiseOr, _: Token.BitwiseOr) => true
-    case (_: Token.BitwiseXor, _: Token.BitwiseXor) => true
-    case (_: Token.LeftShift, _: Token.LeftShift) => true
-    case (_: Token.RightShift, _: Token.RightShift) => true
-    case (_: Token.Question, _: Token.Question) => true
-    case (_: Token.Dot, _: Token.Dot) => true
-    case (_: Token.Class, _: Token.Class) => true
-    case (_: Token.Static, _: Token.Static) => true
-    case (_: Token.Public, _: Token.Public) => true
-    case (_: Token.Private, _: Token.Private) => true
-    case (_: Token.Protected, _: Token.Protected) => true
-    case (_: Token.Open, _: Token.Open) => true
-    case (_: Token.Final, _: Token.Final) => true
-    case (_: Token.Abstract, _: Token.Abstract) => true
-    case (_: Token.Interface, _: Token.Interface) => true
-    case (_: Token.Typedef, _: Token.Typedef) => true
-    case (_: Token.In, _: Token.In) => true
-    case (_: Token.Out, _: Token.Out) => true
-    case (_: Token.Override, _: Token.Override) => true
-    case (_: Token.Return, _: Token.Return) => true
-    case (_: Token.If, _: Token.If) => true
-    case (_: Token.Else, _: Token.Else) => true
-    case (_: Token.For, _: Token.For) => true
-    case (_: Token.While, _: Token.While) => true
-    case (_: Token.Break, _: Token.Break) => true
-    case (_: Token.Continue, _: Token.Continue) => true
-    case (_: Token.True, _: Token.True) => true
-    case (_: Token.False, _: Token.False) => true
-    case (_: Token.NullLiteral, _: Token.NullLiteral) => true
-    case (Token.Identifier(v1, _), Token.Identifier(v2, _)) => v1 == v2
-    case (Token.StringLiteral(v1, _), Token.StringLiteral(v2, _)) => v1 == v2
-    case (Token.CharLiteral(v1, _), Token.CharLiteral(v2, _)) => v1 == v2
-    case (Token.IntegerLiteral(v1, _), Token.IntegerLiteral(v2, _)) => v1 == v2
-    case (Token.FloatLiteral(v1, _), Token.FloatLiteral(v2, _)) => Math.abs(v1 - v2) < 1e-6f
-    case _ => false
-  }
+  def tokenMatches(actual: Token, expected: Token): Boolean =
+    (actual, expected) match {
+      case (_: Token.Colon, _: Token.Colon) => true
+      case (_: Token.SemiColon, _: Token.SemiColon) => true
+      case (_: Token.Comma, _: Token.Comma) => true
+      case (_: Token.LeftCurlyBrace, _: Token.LeftCurlyBrace) => true
+      case (_: Token.RightCurlyBrace, _: Token.RightCurlyBrace) => true
+      case (_: Token.LeftParen, _: Token.LeftParen) => true
+      case (_: Token.RightParen, _: Token.RightParen) => true
+      case (_: Token.LeftBracket, _: Token.LeftBracket) => true
+      case (_: Token.RightBracket, _: Token.RightBracket) => true
+      case (_: Token.Equals, _: Token.Equals) => true
+      case (_: Token.DoubleEquals, _: Token.DoubleEquals) => true
+      case (_: Token.Less, _: Token.Less) => true
+      case (_: Token.Greater, _: Token.Greater) => true
+      case (_: Token.LessEquals, _: Token.LessEquals) => true
+      case (_: Token.GreaterEquals, _: Token.GreaterEquals) => true
+      case (_: Token.Not, _: Token.Not) => true
+      case (_: Token.NotEquals, _: Token.NotEquals) => true
+      case (_: Token.Plus, _: Token.Plus) => true
+      case (_: Token.Minus, _: Token.Minus) => true
+      case (_: Token.Star, _: Token.Star) => true
+      case (_: Token.Slash, _: Token.Slash) => true
+      case (_: Token.Modulo, _: Token.Modulo) => true
+      case (_: Token.PlusEquals, _: Token.PlusEquals) => true
+      case (_: Token.MinusEquals, _: Token.MinusEquals) => true
+      case (_: Token.StarEquals, _: Token.StarEquals) => true
+      case (_: Token.SlashEquals, _: Token.SlashEquals) => true
+      case (_: Token.ModuloEquals, _: Token.ModuloEquals) => true
+      case (_: Token.LeftShiftEquals, _: Token.LeftShiftEquals) => true
+      case (_: Token.RightShiftEquals, _: Token.RightShiftEquals) => true
+      case (_: Token.BitwiseAndEquals, _: Token.BitwiseAndEquals) => true
+      case (_: Token.BitwiseOrEquals, _: Token.BitwiseOrEquals) => true
+      case (_: Token.BitwiseXorEquals, _: Token.BitwiseXorEquals) => true
+      case (_: Token.Increment, _: Token.Increment) => true
+      case (_: Token.Decrement, _: Token.Decrement) => true
+      case (_: Token.LogicalAnd, _: Token.LogicalAnd) => true
+      case (_: Token.LogicalOr, _: Token.LogicalOr) => true
+      case (_: Token.BitwiseAnd, _: Token.BitwiseAnd) => true
+      case (_: Token.BitwiseOr, _: Token.BitwiseOr) => true
+      case (_: Token.BitwiseXor, _: Token.BitwiseXor) => true
+      case (_: Token.LeftShift, _: Token.LeftShift) => true
+      case (_: Token.RightShift, _: Token.RightShift) => true
+      case (_: Token.Question, _: Token.Question) => true
+      case (_: Token.Dot, _: Token.Dot) => true
+      case (_: Token.Class, _: Token.Class) => true
+      case (_: Token.Static, _: Token.Static) => true
+      case (_: Token.Public, _: Token.Public) => true
+      case (_: Token.Private, _: Token.Private) => true
+      case (_: Token.Protected, _: Token.Protected) => true
+      case (_: Token.Open, _: Token.Open) => true
+      case (_: Token.Final, _: Token.Final) => true
+      case (_: Token.Abstract, _: Token.Abstract) => true
+      case (_: Token.Interface, _: Token.Interface) => true
+      case (_: Token.Typedef, _: Token.Typedef) => true
+      case (_: Token.In, _: Token.In) => true
+      case (_: Token.Out, _: Token.Out) => true
+      case (_: Token.Override, _: Token.Override) => true
+      case (_: Token.Return, _: Token.Return) => true
+      case (_: Token.If, _: Token.If) => true
+      case (_: Token.Else, _: Token.Else) => true
+      case (_: Token.For, _: Token.For) => true
+      case (_: Token.While, _: Token.While) => true
+      case (_: Token.Break, _: Token.Break) => true
+      case (_: Token.Continue, _: Token.Continue) => true
+      case (_: Token.True, _: Token.True) => true
+      case (_: Token.False, _: Token.False) => true
+      case (_: Token.NullLiteral, _: Token.NullLiteral) => true
+      case (Token.Identifier(v1, _), Token.Identifier(v2, _)) => v1 == v2
+      case (Token.StringLiteral(v1, _), Token.StringLiteral(v2, _)) => v1 == v2
+      case (Token.CharLiteral(v1, _), Token.CharLiteral(v2, _)) => v1 == v2
+      case (Token.IntegerLiteral(v1, _), Token.IntegerLiteral(v2, _)) =>
+        v1 == v2
+      case (Token.FloatLiteral(v1, _), Token.FloatLiteral(v2, _)) =>
+        Math.abs(v1 - v2) < 1e-6f
+      case _ => false
+    }
 
   def expectTokenSequence(input: String, expected: Token*): Unit = {
     val (tokenInput, _) = Tokeniser.tokenise(input, 0)
@@ -231,7 +237,10 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     diagnostics shouldBe empty
   }
 
-  def testEqualsOperatorSequences(baseOpEquals: Token, baseOpStr: String): Unit = {
+  def testEqualsOperatorSequences(
+      baseOpEquals: Token,
+      baseOpStr: String
+  ): Unit = {
     expectTokenSequence(s"$baseOpStr=", baseOpEquals)
     expectTokenSequence(s"$baseOpStr==", baseOpEquals, Equals)
     expectTokenSequence(s"$baseOpStr===", baseOpEquals, DoubleEquals)
@@ -375,7 +384,13 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
 
     expectTokenSequence("1.0", FloatLiteral(1.0f))
     expectTokenSequence("1.", IntegerLiteral(1), Dot)
-    expectTokenSequence("1.a abc", IntegerLiteral(1), Dot, Identifier("a"), Identifier("abc"))
+    expectTokenSequence(
+      "1.a abc",
+      IntegerLiteral(1),
+      Dot,
+      Identifier("a"),
+      Identifier("abc")
+    )
 
     expectNoDiagnostics("1.0")
   }
@@ -437,7 +452,7 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
       ("--", Decrement),
       ("&&", LogicalAnd),
       ("||", LogicalOr),
-      ("&", BitwiseAnd),
+      ("&", BitwiseAnd)
     ) ++ keywordTokens
 
     allTokens.foreach { case (str1, tok1) =>
@@ -453,7 +468,8 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
   }
 
   it should "tokenise identifiers correctly" in {
-    expectTokenSequence("abc123 234 abc _123 123_",
+    expectTokenSequence(
+      "abc123 234 abc _123 123_",
       Identifier("abc123"),
       IntegerLiteral(234),
       Identifier("abc"),
@@ -462,7 +478,8 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
       Identifier("_")
     )
 
-    expectTokenSequence("class MyClass : SomeOtherClass {\n void foo() { } \n}",
+    expectTokenSequence(
+      "class MyClass : SomeOtherClass {\n void foo() { } \n}",
       Class,
       Identifier("MyClass"),
       Colon,
@@ -484,7 +501,8 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     val keywordStr = keywordTokens.map(_._1).mkString(" ")
     expectTokenSequence(keywordStr, keywordTokens.map(_._2): _*)
 
-    expectTokenSequence("class _class for for-who for() if",
+    expectTokenSequence(
+      "class _class for for-who for() if",
       Class,
       Identifier("_class"),
       For,
@@ -503,17 +521,20 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
   it should "skip single line comments" in {
     expectTokenSequence("// This is a comment")
 
-    expectTokenSequence("// This is a comment \n tokenise normally",
+    expectTokenSequence(
+      "// This is a comment \n tokenise normally",
       Identifier("tokenise"),
       Identifier("normally")
     )
 
-    expectTokenSequence("// This is a comment \t This too is part of the comment \n" +
-      "123456 // Comment can begin after something too",
+    expectTokenSequence(
+      "// This is a comment \t This too is part of the comment \n" +
+        "123456 // Comment can begin after something too",
       IntegerLiteral(123456)
     )
 
-    expectTokenSequence("/ / This is not a comment",
+    expectTokenSequence(
+      "/ / This is not a comment",
       Slash,
       Slash,
       Identifier("This"),
@@ -527,7 +548,8 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
   }
 
   it should "skip multi-line comments correctly" in {
-    expectTokenSequence("/* This is a multi-line comment \n \n Part of comment \n */ tokenise normally",
+    expectTokenSequence(
+      "/* This is a multi-line comment \n \n Part of comment \n */ tokenise normally",
       Identifier("tokenise"),
       Identifier("normally")
     )
@@ -535,12 +557,14 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     expectTokenSequence("/*/ Doesn't close comment")
 
     // Unclosed multiline should also work
-    expectTokenSequence("class A /* Multi-line comments can begin after // \n \n // \n /* 123.456",
+    expectTokenSequence(
+      "class A /* Multi-line comments can begin after // \n \n // \n /* 123.456",
       Class,
       Identifier("A")
     )
 
-    expectTokenSequence("/* Comment /* */ comment ended",
+    expectTokenSequence(
+      "/* Comment /* */ comment ended",
       Identifier("comment"),
       Identifier("ended")
     )

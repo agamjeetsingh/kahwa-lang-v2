@@ -10,16 +10,17 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 private object TypedefCycleDetector {
-  def detectCycles(allTypedefs: List[TypedefDecl])(using nodeToSymbol: MutableNodeToSymbol): List[Diagnostic] = {
+  def detectCycles(
+      allTypedefs: List[TypedefDecl]
+  )(using nodeToSymbol: MutableNodeToSymbol): List[Diagnostic] = {
     val visited = mutable.Set[TypedefSymbol]()
     val visiting = mutable.Set[TypedefSymbol]()
     val diagnostics = ListBuffer[Diagnostic]()
 
-    val typedefSymbolToNode = allTypedefs.collect {
-      typedefDecl =>
-        nodeToSymbol(typedefDecl) match {
-          case typedefSymbol: TypedefSymbol => typedefSymbol -> typedefDecl
-        }
+    val typedefSymbolToNode = allTypedefs.collect { typedefDecl =>
+      nodeToSymbol(typedefDecl) match {
+        case typedefSymbol: TypedefSymbol => typedefSymbol -> typedefDecl
+      }
     }.toMap
 
     def dfs(typedefSymbol: TypedefSymbol, path: List[TypedefSymbol]): Unit = {
@@ -44,17 +45,23 @@ private object TypedefCycleDetector {
       nodeToSymbol(typedefDecl) match {
         case typedefSymbol: TypedefSymbol => typedefSymbol
       }
-    }.foreach(td => dfs(td, List(td)))
+    }
+      .foreach(td => dfs(td, List(td)))
     diagnostics.toList
   }
 
-  private def getTypedefDependencies(typedefSymbol: TypedefSymbol)(using nodeToSymbol: MutableNodeToSymbol): List[TypedefSymbol] = {
+  private def getTypedefDependencies(
+      typedefSymbol: TypedefSymbol
+  )(using nodeToSymbol: MutableNodeToSymbol): List[TypedefSymbol] = {
     val semanticType = typedefSymbol.referredType
     (semanticType.typeSymbol match {
       case typedefSymbol: TypedefSymbol => List(typedefSymbol)
       case _ => List.empty
-    }) ++ semanticType.genericArguments.collect { arg => arg.typeSymbol match {
-      case typedefSymbol: TypedefSymbol => typedefSymbol
-    }}.flatMap(getTypedefDependencies)
+    }) ++ semanticType.genericArguments.collect { arg =>
+      arg.typeSymbol match {
+        case typedefSymbol: TypedefSymbol => typedefSymbol
+      }
+    }
+      .flatMap(getTypedefDependencies)
   }
 }

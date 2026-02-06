@@ -4,21 +4,34 @@ import ast.*
 
 class AstTransformer {
   def transform(expr: Expr): Expr = expr match {
-    case BinaryExpr(expr1, expr2, op, range) => BinaryExpr(transform(expr1), transform(expr2), op, range)
+    case BinaryExpr(expr1, expr2, op, range) =>
+      BinaryExpr(transform(expr1), transform(expr2), op, range)
     case UnaryExpr(expr, op, range) => UnaryExpr(transform(expr), op, range)
-    case CallExpr(callee, args, range) => CallExpr(transform(callee), args.map(transform), range)
-    case IndexExpr(callee, arg, range) => IndexExpr(transform(callee), transform(arg), range)
-    case MemberAccessExpr(base, member, range) => MemberAccessExpr(transform(base), member, range)
-    case TernaryExpr(cond, expr1, expr2, range) => TernaryExpr(transform(cond), transform(expr1), transform(expr2), range)
+    case CallExpr(callee, args, range) =>
+      CallExpr(transform(callee), args.map(transform), range)
+    case IndexExpr(callee, arg, range) =>
+      IndexExpr(transform(callee), transform(arg), range)
+    case MemberAccessExpr(base, member, range) =>
+      MemberAccessExpr(transform(base), member, range)
+    case TernaryExpr(cond, expr1, expr2, range) =>
+      TernaryExpr(transform(cond), transform(expr1), transform(expr2), range)
     case expr => expr
   }
   def transform(stmt: Stmt): Stmt = stmt match {
     case ExprStmt(expr, range) => ExprStmt(transform(expr), range)
     case BlockStmt(stmts, range) => BlockStmt(stmts.map(transform), range)
-    case IfStmt(expr, ifBlock, elseBlock, range) => IfStmt(transform(expr), transform(ifBlock), elseBlock.map(transform), range)
+    case IfStmt(expr, ifBlock, elseBlock, range) =>
+      IfStmt(
+        transform(expr),
+        transform(ifBlock),
+        elseBlock.map(transform),
+        range
+      )
     case ReturnStmt(expr, range) => ReturnStmt(transform(expr), range)
-    case WhileStmt(cond, body, range) => WhileStmt(transform(cond), transform(body), range)
-    case VariableDeclStmt(variableDecl, range) => VariableDeclStmt(transform(variableDecl), range)
+    case WhileStmt(cond, body, range) =>
+      WhileStmt(transform(cond), transform(body), range)
+    case VariableDeclStmt(variableDecl, range) =>
+      VariableDeclStmt(transform(variableDecl), range)
     case stmt => stmt
   }
   def transform(blockStmt: ast.BlockStmt): ast.BlockStmt = {
@@ -50,7 +63,8 @@ class AstTransformer {
     )
   }
 
-  def transform(typeParameterDecl: TypeParameterDecl): TypeParameterDecl = typeParameterDecl
+  def transform(typeParameterDecl: TypeParameterDecl): TypeParameterDecl =
+    typeParameterDecl
 
   def transform(functionDecl: FunctionDecl): FunctionDecl = {
     functionDecl.copy(

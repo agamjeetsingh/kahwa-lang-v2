@@ -16,7 +16,10 @@ object Visibility {
       case Modifier.PUBLIC => PUBLIC
       case Modifier.PRIVATE => PRIVATE
       case Modifier.PROTECTED => PROTECTED
-      case _ => throw IllegalArgumentException(s"Visibility.fromModifier received a non-visibility modifier: ${modifier.prettyPrint}")
+      case _ =>
+        throw IllegalArgumentException(
+          s"Visibility.fromModifier received a non-visibility modifier: ${modifier.prettyPrint}"
+        )
     }
   }
 }

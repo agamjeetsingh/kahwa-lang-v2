@@ -1,12 +1,10 @@
 package ast
 
-/**
- * Base visitor trait for traversing AST nodes.
- * Type parameter R represents the result type returned by visit methods.
- *
- * This uses a hybrid approach: generalized visitExpr/visitStmt for expressions and statements
- * (which are uniform in behavior), but specific methods for declarations (which have distinct semantics).
- */
+/** Base visitor trait for traversing AST nodes. Type parameter R represents the result type returned by visit methods.
+  *
+  * This uses a hybrid approach: generalized visitExpr/visitStmt for expressions and statements (which are uniform in
+  * behavior), but specific methods for declarations (which have distinct semantics).
+  */
 trait Visitor[R] {
   // Generalized for expressions and statements
   def visitExpr(node: Expr): R
@@ -25,9 +23,8 @@ trait Visitor[R] {
   def visitKahwaFile(node: KahwaFile): R
 }
 
-/**
- * Extension methods to add accept functionality to AST nodes without modifying them.
- */
+/** Extension methods to add accept functionality to AST nodes without modifying them.
+  */
 extension (node: AstNode) {
   def accept[R](visitor: Visitor[R]): R = node match {
     // KahwaFile (must come first since it extends Decl)
@@ -50,37 +47,33 @@ extension (node: AstNode) {
   }
 }
 
-/**
- * A base visitor implementation that automatically traverses all child nodes using pattern matching.
- * Override the general visit methods (visitExpr, visitStmt, visitDecl) to customize behavior.
- *
- * Subclasses must implement:
- * - defaultResult: The default value to return when visiting leaf nodes
- * - combine (optional): How to aggregate results from multiple children
- */
+/** A base visitor implementation that automatically traverses all child nodes using pattern matching. Override the
+  * general visit methods (visitExpr, visitStmt, visitDecl) to customize behavior.
+  *
+  * Subclasses must implement:
+  *   - defaultResult: The default value to return when visiting leaf nodes
+  *   - combine (optional): How to aggregate results from multiple children
+  */
 abstract class TraversingVisitor[R] extends Visitor[R] {
-  /**
-   * The default result to return for leaf nodes or when no custom logic is needed.
-   */
+
+  /** The default result to return for leaf nodes or when no custom logic is needed.
+    */
   protected def defaultResult: R
 
-  /**
-   * Combines results from visiting multiple child nodes.
-   * Default implementation returns the second result (useful for Unit, or keeping last result).
-   * Override to implement custom aggregation logic (e.g., combining lists, accumulating values).
-   */
+  /** Combines results from visiting multiple child nodes. Default implementation returns the second result (useful for
+    * Unit, or keeping last result). Override to implement custom aggregation logic (e.g., combining lists, accumulating
+    * values).
+    */
   protected def combine(r1: R, r2: R): R = r2
 
-  /**
-   * Helper to visit a list of nodes and combine their results.
-   */
+  /** Helper to visit a list of nodes and combine their results.
+    */
   protected def visitList(nodes: List[AstNode]): R = {
     nodes.foldLeft(defaultResult)((acc, node) => combine(acc, node.accept(this)))
   }
 
-  /**
-   * Helper to visit an optional node.
-   */
+  /** Helper to visit an optional node.
+    */
   protected def visitOption(nodeOpt: Option[AstNode]): R = {
     nodeOpt.map(_.accept(this)).getOrElse(defaultResult)
   }
@@ -115,8 +108,7 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
       combine(combine(r1, r2), r3)
 
     // Leaf nodes (literals and identifiers)
-    case _: Ident | _: BoolLiteral | _: FloatLiteral |
-         _: IntegerLiteral | _: NullLiteral | _: StringLiteral =>
+    case _: Ident | _: BoolLiteral | _: FloatLiteral | _: IntegerLiteral | _: NullLiteral | _: StringLiteral =>
       defaultResult
   }
 
@@ -191,7 +183,9 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
   // ===== Other Nodes =====
   def visitTypeRef(node: TypeRef): R = {
     val r1 = node.name.accept(this)
-    val r2 = visitList(node.args.map(_._1)) // Visit type arguments (ignoring variance)
+    val r2 = visitList(
+      node.args.map(_._1)
+    ) // Visit type arguments (ignoring variance)
     combine(r1, r2)
   }
 

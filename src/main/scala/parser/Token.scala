@@ -3,7 +3,6 @@ package parser
 import ast.PrettyPrintable
 import sources.SourceRange
 
-
 enum Token extends PrettyPrintable {
   // Delimiters
   val range: SourceRange
@@ -153,14 +152,14 @@ enum Token extends PrettyPrintable {
   case IntegerLiteral(value: Int, range: SourceRange) extends Token
 
   case FloatLiteral(value: Float, range: SourceRange) extends Token
-  
+
   def isModifier: Boolean = this match {
-    case (_: Token.Static) | (_: Token.Public) | (_: Token.Private) |
-         (_: Token.Protected) | (_: Token.Open) | (_: Token.Final) |
-         (_: Token.Abstract) | (_: Token.Override) => true
+    case (_: Token.Static) | (_: Token.Public) | (_: Token.Private) | (_: Token.Protected) | (_: Token.Open) |
+      (_: Token.Final) | (_: Token.Abstract) | (_: Token.Override) =>
+      true
     case _ => false
   }
-  
+
   override def prettyPrint: String = this match {
     case Token.Colon(_) => ":"
     case Token.SemiColon(_) => ";"

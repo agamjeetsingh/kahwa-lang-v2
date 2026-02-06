@@ -15,11 +15,12 @@ object SemanticAnalyser {
   private[analyser] type MutableNodeToSymbol = mutable.Map[Decl, Symbol]
   private[analyser] type MutableIdentToSymbol = mutable.Map[Ident, Symbol]
   private[analyser] type MutableNodeToScope = mutable.Map[AstNode, Scope]
-  private[analyser] type MutableTypeRefToSemanticType = mutable.Map[TypeRef, SemanticType]
+  private[analyser] type MutableTypeRefToSemanticType =
+    mutable.Map[TypeRef, SemanticType]
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
 
-    // Phase 1: Compress member access expressions to unqual idents ((a.b).c) -> (a.b.c)
+    // Phase 1: Compress member access expressions to idents ((a.b).c) -> (a.b.c)
     kahwaFile = AccessCompressor.transform(kahwaFile)
 
     given nodeToSymbol: MutableNodeToSymbol = mutable.Map()
@@ -29,47 +30,28 @@ object SemanticAnalyser {
     val res = DeclareNames.declareFile(kahwaFile)
 
     // Phase 3: Provide a scope to every single AST Node
-    val nodeToScope: MutableNodeToScope = AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
+    val nodeToScope: MutableNodeToScope =
+      AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
 
-    // Phase 4: Build a map from TypeRefs to Symbols (TODO)
-    val typeRefToSymbol: MutableTypeRefToSemanticType = TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(kahwaFile)
-    
-    // Phase 5: Detect cycles in the typedefs (TODO)
+    // Phase 4: Build a map from TypeRefs to Symbols
+    val typeRefToSymbol: MutableTypeRefToSemanticType =
+      TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(
+        kahwaFile
+      )
+
+    // Phase 5: Detect cycles in the typedefs
     diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
 
-    // Phase 6: Replace each type def with the right type (TODO)
-    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol).transform(kahwaFile)
+    // Phase 6: Replace each type def with the right type (TODO - Repair nodeToScope)
+    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol)
+      .transform(kahwaFile)
 
     // Phase 7: Resolve all typeRefs to semantic types except for the ones in method bodies
     // TODO - Can be simplified a lot by using the nodeToScope map
-    diagnostics ++= PartialTypeResolver.TypeResolver(nodeToSymbol.toMap, nodeToScope.toMap).visitKahwaFile(kahwaFile)
+    diagnostics ++= PartialTypeResolver
+      .TypeResolver(nodeToSymbol.toMap, nodeToScope.toMap)
+      .visitKahwaFile(kahwaFile)
 
     (res, diagnostics.toList)
-  }
-
-  private class QualifyIdents(nodeToScope: NodeToScope) extends AstTransformer {
-    given NodeToScope = nodeToScope
-    override def transform(typeRef: TypeRef): TypeRef = {
-      ???
-//      nodeToScope(typeRef).searchForType(typeRef.name).headOption match {
-//        case Some(typeSymbol) => TypeRef(
-//          Qual(typeRef.name.asInstanceOf[Unqual].name, typeSymbol, typeRef.name.range),
-//          typeRef.args.map((typeRef, variance) => (transform(typeRef), variance)),
-//          typeRef.range)
-//        case None => super.transform(typeRef)
-//      }
-    }
-
-    override def transform(expr: Expr): Expr = {
-      expr match {
-        case ident: Ident => ???
-        case BinaryExpr(expr1, expr2, op, range) => ???
-        case UnaryExpr(expr, op, range) => ???
-        case CallExpr(callee, args, range) => ???
-        case IndexExpr(callee, arg, range) => ???
-        case MemberAccessExpr(base, member, range) => ???
-        case _ => super.transform(expr)
-      }
-    }
   }
 }

@@ -1,6 +1,19 @@
 package symbols.analyser
 
-import ast.{AstNode, BlockStmt, ClassDecl, Decl, Expr, FunctionDecl, KahwaFile, Stmt, TraversingVisitor, TypeRef, TypedefDecl, VariableDecl}
+import ast.{
+  AstNode,
+  BlockStmt,
+  ClassDecl,
+  Decl,
+  Expr,
+  FunctionDecl,
+  KahwaFile,
+  Stmt,
+  TraversingVisitor,
+  TypeRef,
+  TypedefDecl,
+  VariableDecl
+}
 import symbols.Scope
 import symbols.analyser.SemanticAnalyser.MutableNodeToScope
 
@@ -10,7 +23,10 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
 
   override protected def defaultResult: MutableNodeToScope = mutable.Map.empty
 
-  override protected def combine(r1: MutableNodeToScope, r2: MutableNodeToScope): MutableNodeToScope = r1 ++ r2
+  override protected def combine(
+      r1: MutableNodeToScope,
+      r2: MutableNodeToScope
+  ): MutableNodeToScope = r1 ++ r2
 
   // KahwaFile is the root and creates a scope from its symbol
   override def visitKahwaFile(node: KahwaFile): MutableNodeToScope =
@@ -42,12 +58,17 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
   override def visitTypeRef(node: TypeRef): MutableNodeToScope =
     addAndRecurse(node, super.visitTypeRef)
 
-
-  private def addAndRecurse[T <: AstNode](node: T, recurse: T => MutableNodeToScope): MutableNodeToScope = {
+  private def addAndRecurse[T <: AstNode](
+      node: T,
+      recurse: T => MutableNodeToScope
+  ): MutableNodeToScope = {
     recurse(node) ++ mutable.Map(node -> stack.top)
   }
 
-  private def withScopeFrom[T <: Decl](node: T, recurse: T => MutableNodeToScope): MutableNodeToScope = {
+  private def withScopeFrom[T <: Decl](
+      node: T,
+      recurse: T => MutableNodeToScope
+  ): MutableNodeToScope = {
     stack.push(nodeToSymbol(node).scope)
     try {
       recurse(node) ++ mutable.Map(node -> nodeToSymbol(node).scope)
@@ -56,7 +77,10 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
     }
   }
 
-  private def withScopeFromBlock(node: BlockStmt, recurse: Stmt => MutableNodeToScope): MutableNodeToScope = {
+  private def withScopeFromBlock(
+      node: BlockStmt,
+      recurse: Stmt => MutableNodeToScope
+  ): MutableNodeToScope = {
     stack.push(node.scope)
     try {
       recurse(node) ++ mutable.Map(node -> node.scope)
