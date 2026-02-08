@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockStmt, Expr, Modifier, TypeRef, Variance}
+import ast.{BlockExpr, Expr, Modifier, TypeRef, Variance}
 import ast.Variance.INVARIANT
 
 import scala.collection.mutable.ListBuffer
@@ -60,7 +60,6 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
 }
 
 class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
-  var isStatic: Boolean = false
   var semanticType: SemanticType = GlobalScope.ErrorType
   val initExpr: Option[Expr] = None
 }
@@ -74,10 +73,9 @@ class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleV
 }
 
 class FunctionSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
-  var isStatic: Boolean = false
   var visibility: Visibility = Visibility.default
 
-  var block: BlockStmt = BlockStmt(List.empty)
+  var block: BlockExpr = BlockExpr(List.empty)
 
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty

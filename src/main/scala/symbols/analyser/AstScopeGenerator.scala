@@ -2,17 +2,28 @@ package symbols.analyser
 
 import ast.{
   AstNode,
-  BlockStmt,
+  BinaryExpr,
+  BlockExpr,
+  BreakExpr,
+  CallExpr,
   ClassDecl,
+  ContinueExpr,
   Decl,
   Expr,
   FunctionDecl,
+  Ident,
+  IfExpr,
   KahwaFile,
-  Stmt,
+  LambdaExpr,
+  LiteralExpr,
+  MemberAccessExpr,
   TraversingVisitor,
+  TupleExpr,
   TypeRef,
   TypedefDecl,
-  VariableDecl
+  UnaryExpr,
+  VariableDecl,
+  WhileExpr
 }
 import symbols.Scope
 import symbols.analyser.SemanticAnalyser.MutableNodeToScope
@@ -46,13 +57,11 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
     withScopeFrom(node, super.visitTypedefDecl)
 
   // All expressions just need to be mapped to the current scope
-  override def visitExpr(node: Expr): MutableNodeToScope =
-    addAndRecurse(node, super.visitExpr)
-
-  // Statements need special handling for BlockStmt (which has its own scope)
-  override def visitStmt(node: Stmt): MutableNodeToScope = node match {
-    case block: BlockStmt => withScopeFromBlock(block, super.visitStmt)
-    case _ => addAndRecurse(node, super.visitStmt)
+  override def visitExpr(node: Expr): MutableNodeToScope = {
+    node match {
+      case block: BlockExpr => withScopeFromBlock(block, super.visitExpr)
+      case _ => addAndRecurse(node, super.visitExpr)
+    }
   }
 
   override def visitTypeRef(node: TypeRef): MutableNodeToScope =
@@ -77,10 +86,7 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
     }
   }
 
-  private def withScopeFromBlock(
-      node: BlockStmt,
-      recurse: Stmt => MutableNodeToScope
-  ): MutableNodeToScope = {
+  private def withScopeFromBlock(node: BlockExpr, recurse: Expr => MutableNodeToScope): MutableNodeToScope = {
     stack.push(node.scope)
     try {
       recurse(node) ++ mutable.Map(node -> node.scope)

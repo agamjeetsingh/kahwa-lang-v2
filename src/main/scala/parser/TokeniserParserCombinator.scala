@@ -14,17 +14,13 @@ import parser.Token.{
   For,
   Identifier,
   If,
-  In,
   Interface,
-  NullLiteral,
   Open,
-  Out,
   Override,
   Private,
   Protected,
   Public,
   Return,
-  Static,
   True,
   Typedef,
   While
@@ -451,7 +447,6 @@ class TokeniserParserCombinator {
           case "override" => Override(sourceRange)
           case "typedef" => Typedef(sourceRange)
           case "private" => Private(sourceRange)
-          case "static" => Static(sourceRange)
           case "public" => Public(sourceRange)
           case "return" => Return(sourceRange)
           case "class" => Class(sourceRange)
@@ -461,11 +456,8 @@ class TokeniserParserCombinator {
           case "false" => False(sourceRange)
           case "open" => Open(sourceRange)
           case "true" => True(sourceRange)
-          case "null" => NullLiteral(sourceRange)
           case "else" => Else(sourceRange)
           case "for" => For(sourceRange)
-          case "out" => Out(sourceRange)
-          case "in" => In(sourceRange)
           case "if" => If(sourceRange)
           case _ => Identifier(str, sourceRange)
       }

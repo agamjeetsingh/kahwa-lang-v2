@@ -63,19 +63,15 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     val Return = Token.Return(SourceRange.dummy)
     val True = Token.True(SourceRange.dummy)
     val False = Token.False(SourceRange.dummy)
-    val NullLiteral = Token.NullLiteral(SourceRange.dummy)
     val Public = Token.Public(SourceRange.dummy)
     val Private = Token.Private(SourceRange.dummy)
     val Protected = Token.Protected(SourceRange.dummy)
-    val Static = Token.Static(SourceRange.dummy)
     val Final = Token.Final(SourceRange.dummy)
     val Open = Token.Open(SourceRange.dummy)
     val Abstract = Token.Abstract(SourceRange.dummy)
     val Break = Token.Break(SourceRange.dummy)
     val Continue = Token.Continue(SourceRange.dummy)
     val Typedef = Token.Typedef(SourceRange.dummy)
-    val In = Token.In(SourceRange.dummy)
-    val Out = Token.Out(SourceRange.dummy)
     val Override = Token.Override(SourceRange.dummy)
 
     def Identifier(value: String) = Token.Identifier(value, SourceRange.dummy)
@@ -125,19 +121,15 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
     ("return", Return),
     ("true", True),
     ("false", False),
-    ("null", NullLiteral),
     ("public", Public),
     ("private", Private),
     ("protected", Protected),
-    ("static", Static),
     ("final", Final),
     ("open", Open),
     ("abstract", Abstract),
     ("break", Break),
     ("continue", Continue),
     ("typedef", Typedef),
-    ("in", In),
-    ("out", Out),
     ("override", Override)
   )
 
@@ -188,7 +180,6 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
       case (_: Token.Question, _: Token.Question) => true
       case (_: Token.Dot, _: Token.Dot) => true
       case (_: Token.Class, _: Token.Class) => true
-      case (_: Token.Static, _: Token.Static) => true
       case (_: Token.Public, _: Token.Public) => true
       case (_: Token.Private, _: Token.Private) => true
       case (_: Token.Protected, _: Token.Protected) => true
@@ -197,8 +188,6 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
       case (_: Token.Abstract, _: Token.Abstract) => true
       case (_: Token.Interface, _: Token.Interface) => true
       case (_: Token.Typedef, _: Token.Typedef) => true
-      case (_: Token.In, _: Token.In) => true
-      case (_: Token.Out, _: Token.Out) => true
       case (_: Token.Override, _: Token.Override) => true
       case (_: Token.Return, _: Token.Return) => true
       case (_: Token.If, _: Token.If) => true
@@ -209,7 +198,6 @@ class TokeniserTest extends AnyFlatSpec with Matchers {
       case (_: Token.Continue, _: Token.Continue) => true
       case (_: Token.True, _: Token.True) => true
       case (_: Token.False, _: Token.False) => true
-      case (_: Token.NullLiteral, _: Token.NullLiteral) => true
       case (Token.Identifier(v1, _), Token.Identifier(v2, _)) => v1 == v2
       case (Token.StringLiteral(v1, _), Token.StringLiteral(v2, _)) => v1 == v2
       case (Token.CharLiteral(v1, _), Token.CharLiteral(v2, _)) => v1 == v2

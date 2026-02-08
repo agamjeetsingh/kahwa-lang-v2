@@ -34,23 +34,23 @@ object SemanticAnalyser {
       AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
 
     // Phase 4: Build a map from TypeRefs to Symbols
-    val typeRefToSymbol: MutableTypeRefToSemanticType =
-      TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(
-        kahwaFile
-      )
+//    val typeRefToSymbol: MutableTypeRefToSemanticType =
+//      TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(
+//        kahwaFile
+//      )
 
     // Phase 5: Detect cycles in the typedefs
     diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
 
     // Phase 6: Replace each type def with the right type (TODO - Repair nodeToScope)
-    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol)
-      .transform(kahwaFile)
+//    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol)
+//      .transform(kahwaFile)
 
     // Phase 7: Resolve all typeRefs to semantic types except for the ones in method bodies
     // TODO - Can be simplified a lot by using the nodeToScope map
-    diagnostics ++= PartialTypeResolver
-      .TypeResolver(nodeToSymbol.toMap, nodeToScope.toMap)
-      .visitKahwaFile(kahwaFile)
+//    diagnostics ++= PartialTypeResolver
+//      .TypeResolver(nodeToSymbol.toMap, nodeToScope.toMap)
+//      .visitKahwaFile(kahwaFile)
 
     (res, diagnostics.toList)
   }

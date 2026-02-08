@@ -27,6 +27,9 @@ object Tokeniser {
     Map(
       "<<=" -> Token.LeftShiftEquals.apply,
       ">>=" -> Token.RightShiftEquals.apply,
+      "=>" -> Token.Arrow.apply,
+      ">:" -> Token.SupertypeOp.apply,
+      "<:" -> Token.SubtypeOp.apply,
       "==" -> Token.DoubleEquals.apply,
       "!=" -> Token.NotEquals.apply,
       "<=" -> Token.LessEquals.apply,
@@ -73,7 +76,6 @@ object Tokeniser {
       "class" -> Token.Class.apply,
       "interface" -> Token.Interface.apply,
       "typedef" -> Token.Typedef.apply,
-      "static" -> Token.Static.apply,
       "public" -> Token.Public.apply,
       "private" -> Token.Private.apply,
       "protected" -> Token.Protected.apply,
@@ -81,8 +83,8 @@ object Tokeniser {
       "final" -> Token.Final.apply,
       "abstract" -> Token.Abstract.apply,
       "override" -> Token.Override.apply,
-      "in" -> Token.In.apply,
-      "out" -> Token.Out.apply,
+      "object" -> Token.ObjectTok.apply,
+      "def" -> Token.Def.apply,
       "return" -> Token.Return.apply,
       "if" -> Token.If.apply,
       "else" -> Token.Else.apply,
@@ -92,7 +94,8 @@ object Tokeniser {
       "continue" -> Token.Continue.apply,
       "true" -> Token.True.apply,
       "false" -> Token.False.apply,
-      "null" -> Token.NullLiteral.apply
+      "val" -> Token.Val.apply,
+      "var" -> Token.Var.apply,
     )
   )
 

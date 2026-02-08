@@ -8,14 +8,15 @@ package ast
 trait Visitor[R] {
   // Generalized for expressions and statements
   def visitExpr(node: Expr): R
-  def visitStmt(node: Stmt): R
 
   // Specific for declarations (they have distinct semantic meanings)
   def visitTypedefDecl(node: TypedefDecl): R
   def visitVariableDecl(node: VariableDecl): R
+  def visitFieldDecl(node: FieldDecl): R
   def visitTypeParameterDecl(node: TypeParameterDecl): R
   def visitFunctionDecl(node: FunctionDecl): R
   def visitClassDecl(node: ClassDecl): R
+  def visitObjectDecl(node: ObjectDecl): R
 
   // Other nodes
   def visitTypeRef(node: TypeRef): R
@@ -30,16 +31,18 @@ extension (node: AstNode) {
     // KahwaFile (must come first since it extends Decl)
     case n: KahwaFile => visitor.visitKahwaFile(n)
 
+    case n: VariableDecl => visitor.visitVariableDecl(n)
+
     // Generalized for expressions and statements
     case n: Expr => visitor.visitExpr(n)
-    case n: Stmt => visitor.visitStmt(n)
 
     // Specific for declarations
     case n: TypedefDecl => visitor.visitTypedefDecl(n)
-    case n: VariableDecl => visitor.visitVariableDecl(n)
+    case n: FieldDecl => visitor.visitFieldDecl(n)
     case n: TypeParameterDecl => visitor.visitTypeParameterDecl(n)
     case n: FunctionDecl => visitor.visitFunctionDecl(n)
     case n: ClassDecl => visitor.visitClassDecl(n)
+    case n: ObjectDecl => visitor.visitObjectDecl(n)
 
     // Other nodes
     case n: TypeRef => visitor.visitTypeRef(n)
@@ -80,66 +83,40 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
 
   // ===== Expressions =====
   def visitExpr(node: Expr): R = node match {
-    case n: BinaryExpr =>
-      val r1 = n.expr1.accept(this)
-      val r2 = n.expr2.accept(this)
+    case BinaryExpr(expr1, expr2, _, _) =>
+      val r1 = expr1.accept(this)
+      val r2 = expr2.accept(this)
       combine(r1, r2)
 
-    case n: UnaryExpr =>
-      n.expr.accept(this)
+    case UnaryExpr(expr, _, _) => expr.accept(this)
 
-    case n: CallExpr =>
-      val r1 = n.callee.accept(this)
-      val r2 = visitList(n.args)
+    case CallExpr(callee, args, _) =>
+      val r1 = callee.accept(this)
+      val r2 = visitList(args)
       combine(r1, r2)
 
-    case n: IndexExpr =>
-      val r1 = n.callee.accept(this)
-      val r2 = n.arg.accept(this)
+    case MemberAccessExpr(base, _, _) => base.accept(this)
+
+    case _: Ident | _: LiteralExpr | _: BreakExpr | _: ContinueExpr => defaultResult
+    case BlockExpr(exprs, _) => visitList(exprs)
+    case IfExpr(expr, ifBlock, elseBlock, _) =>
+      val r1 = expr.accept(this)
+      val r2 = ifBlock.accept(this)
+      val r3 = visitOption(elseBlock)
+      combine(r1, r2, r3)
+    case WhileExpr(cond, body, _) =>
+      val r1 = cond.accept(this)
+      val r2 = body.accept(this)
       combine(r1, r2)
-
-    case n: MemberAccessExpr =>
-      n.base.accept(this)
-
-    case n: TernaryExpr =>
-      val r1 = n.cond.accept(this)
-      val r2 = n.expr1.accept(this)
-      val r3 = n.expr2.accept(this)
-      combine(combine(r1, r2), r3)
-
-    // Leaf nodes (literals and identifiers)
-    case _: Ident | _: BoolLiteral | _: FloatLiteral | _: IntegerLiteral | _: NullLiteral | _: StringLiteral =>
-      defaultResult
-  }
-
-  // ===== Statements =====
-  def visitStmt(node: Stmt): R = node match {
-    case n: BlockStmt =>
-      visitList(n.stmts)
-
-    case n: ExprStmt =>
-      n.expr.accept(this)
-
-    case n: IfStmt =>
-      val r1 = n.expr.accept(this)
-      val r2 = n.ifBlock.accept(this)
-      val r3 = visitOption(n.elseBlock)
-      combine(combine(r1, r2), r3)
-
-    case n: ReturnStmt =>
-      n.expr.accept(this)
-
-    case n: WhileStmt =>
-      val r1 = n.cond.accept(this)
-      val r2 = n.body.accept(this)
+    case LambdaExpr(paramList, body, _) => 
+      val r1 = visitList(paramList)
+      val r2 = body.accept(this)
       combine(r1, r2)
-
-    case n: VariableDeclStmt =>
-      n.variableDecl.accept(this)
-
-    // Leaf nodes
-    case _: BreakStmt | _: ContinueStmt =>
-      defaultResult
+    case TupleExpr(elements, _) => visitList(elements)
+    case VariableDecl(_, typeRef, _, initExpr, _) =>
+      val r1 = visitOption(typeRef)
+      val r2 = visitOption(initExpr)
+      combine(r1, r2)
   }
 
   // ===== Declarations =====
@@ -147,14 +124,20 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     val r1 = visitList(node.typeParameters)
     val r2 = node.referredType.accept(this)
     val r3 = visitList(node.modifiers)
-    combine(combine(r1, r2), r3)
+    combine(r1, r2, r3)
   }
 
   def visitVariableDecl(node: VariableDecl): R = {
-    val r1 = node.typeRef.accept(this)
+    val r1 = visitOption(node.typeRef)
+    val r2 = visitOption(node.initExpr)
+    combine(r1, r2)
+  }
+  
+  def visitFieldDecl(node: FieldDecl): R = {
+    val r1 = visitOption(node.typeRef)
     val r2 = visitOption(node.initExpr)
     val r3 = visitList(node.modifiers)
-    combine(combine(r1, r2), r3)
+    combine(r1, r2, r3)
   }
 
   def visitTypeParameterDecl(node: TypeParameterDecl): R = {
@@ -167,7 +150,7 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     val r3 = node.block.accept(this)
     val r4 = visitList(node.modifiers)
     val r5 = visitList(node.typeParameters)
-    combine(combine(combine(combine(r1, r2), r3), r4), r5)
+    combine(r1, r2, r3, r4, r5)
   }
 
   def visitClassDecl(node: ClassDecl): R = {
@@ -176,17 +159,36 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     val r3 = visitList(node.fields)
     val r4 = visitList(node.methods)
     val r5 = visitList(node.nestedClasses)
-    val r6 = visitList(node.typeParameters)
-    combine(combine(combine(combine(combine(r1, r2), r3), r4), r5), r6)
+    val r6 = visitList(node.nestedObjects)
+    val r7 = visitList(node.typeParameters)
+    combine(r1, r2, r3, r4, r5, r6, r7)
+  }
+
+  def visitObjectDecl(node: ObjectDecl): R = {
+    val r1 = visitList(node.modifiers)
+    val r2 = visitList(node.superClasses)
+    val r3 = visitList(node.fields)
+    val r4 = visitList(node.methods)
+    val r5 = visitList(node.nestedClasses)
+    val r6 = visitList(node.nestedObjects)
+    combine(r1, r2, r3, r4, r5, r6)
   }
 
   // ===== Other Nodes =====
   def visitTypeRef(node: TypeRef): R = {
-    val r1 = node.name.accept(this)
-    val r2 = visitList(
-      node.args.map(_._1)
-    ) // Visit type arguments (ignoring variance)
-    combine(r1, r2)
+    node match {
+      case AtomType(name, args, range) => {
+        val r1 = name.accept(this)
+        val r2 = visitList(args)
+        combine(r1, r2)
+      }
+      case TupleType(elems, range) => visitList(elems)
+      case FunctionType(paramList, returnType, range) => {
+        val r1 = visitList(paramList)
+        val r2 = returnType.accept(this)
+        combine(r1, r2)
+      }
+    }
   }
 
   def visitModifierNode(node: ModifierNode): R = defaultResult
@@ -196,6 +198,11 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
     val r2 = visitList(node.classDecls)
     val r3 = visitList(node.functionDecls)
     val r4 = visitList(node.variableDecls)
-    combine(combine(combine(r1, r2), r3), r4)
+    val r5 = visitList(node.objectDecls)
+    combine(r1, r2, r3, r4, r5)
+  }
+  
+  private def combine(rs: R*): R = {
+    rs.reduceLeft(combine)
   }
 }

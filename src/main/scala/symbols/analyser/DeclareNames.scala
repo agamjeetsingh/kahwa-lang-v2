@@ -199,18 +199,18 @@ private object DeclareNames {
       duplicatesAllowed = true
     )
 
-    registerTerm(
-      classSymbol,
-      classDecl.fields,
-      variableDecl => (declareField(variableDecl, classSymbol.scope), variableDecl.range),
-      classSymbol.fields += _
-    )
+//    registerTerm(
+//      classSymbol,
+//      classDecl.fields,
+//      variableDecl => (declareField(variableDecl, classSymbol.scope), variableDecl.range),
+//      classSymbol.fields += _
+//    )
 
     classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel)
 
     modifierNotAllowed(
       classDecl.modifiers,
-      Set(Modifier.STATIC, Modifier.OVERRIDE).contains
+      _ == Modifier.OVERRIDE
     )
 
     classSymbol.setModality(resolveModality(classDecl.modifiers))
@@ -251,8 +251,6 @@ private object DeclareNames {
     )
 
     functionSymbol.visibility = resolveVisibility(functionDecl.modifiers, true)
-    functionSymbol.isStatic =
-      hasModifier(functionDecl.modifiers, Modifier.STATIC)
 
     modifierNotAllowed(
       functionDecl.modifiers,
@@ -318,7 +316,6 @@ private object DeclareNames {
     )
 
     methodSymbol.visibility = resolveVisibility(functionDecl.modifiers, false)
-    methodSymbol.isStatic = hasModifier(functionDecl.modifiers, Modifier.STATIC)
 
     methodSymbol.setModality(resolveModality(functionDecl.modifiers))
     methodSymbol.isAnOverride =
@@ -331,10 +328,8 @@ private object DeclareNames {
       diagnostics: ListBuffer[Diagnostic]
   ): VariableSymbol = {
     val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
-
-    variableSymbol.isStatic =
-      hasModifier(variableDecl.modifiers, Modifier.STATIC)
-    modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
+    
+//    modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
 
     variableSymbol
   }
@@ -345,9 +340,7 @@ private object DeclareNames {
   )(using diagnostics: ListBuffer[Diagnostic]): VisibleVariableSymbol = {
     val visibleVariableSymbol =
       VisibleVariableSymbol(variableDecl.name, outerScope)
-
-    visibleVariableSymbol.isStatic =
-      hasModifier(variableDecl.modifiers, Modifier.STATIC)
+    
     visibleVariableSymbol.visibility =
       resolveVisibility(variableDecl.modifiers, true)
 
@@ -364,7 +357,6 @@ private object DeclareNames {
   ): FieldSymbol = {
     val fieldSymbol = FieldSymbol(variableDecl.name, outerScope)
 
-    fieldSymbol.isStatic = hasModifier(variableDecl.modifiers, Modifier.STATIC)
     fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true)
 
     fieldSymbol.setModality(resolveModality(variableDecl.modifiers))
