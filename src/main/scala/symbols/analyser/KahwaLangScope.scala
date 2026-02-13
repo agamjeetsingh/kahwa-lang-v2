@@ -6,9 +6,24 @@ import symbols.{ClassSymbol, Scope, SemanticType, TypeParameterSymbol, TypeSymbo
 object KahwaLangScope extends Scope {
   val ErrorTypeSymbol: TypeSymbol = TypeSymbol("Error-Type", KahwaLangScope)
   val ErrorType: SemanticType = SemanticType(ErrorTypeSymbol)
+  
+  val NothingSymbol: TypeSymbol = TypeSymbol("Nothing", KahwaLangScope)
+  val NothingType: SemanticType = SemanticType(NothingSymbol)
+  
+  val AnySymbol: TypeSymbol = TypeSymbol("Any", KahwaLangScope)
+  val AnyType: SemanticType = SemanticType(AnySymbol)
 
-  private val IntTypeSymbol: TypeSymbol = TypeSymbol("Int", KahwaLangScope)
+  val IntTypeSymbol: TypeSymbol = TypeSymbol("Int", KahwaLangScope)
   val IntType: SemanticType = SemanticType(IntTypeSymbol)
+  
+  val BoolTypeSymbol: TypeSymbol = TypeSymbol("Bool", KahwaLangScope)
+  val BoolType: SemanticType = SemanticType(BoolTypeSymbol)
+  
+  val FloatTypeSymbol: TypeSymbol = TypeSymbol("Float", KahwaLangScope)
+  val FloatType: SemanticType = SemanticType(FloatTypeSymbol)
+  
+  val StringTypeSymbol: TypeSymbol = TypeSymbol("String", KahwaLangScope)
+  val StringType: SemanticType = SemanticType(StringTypeSymbol)
   
   val MIN_TUPLE_SIZE = 2
   val MAX_TUPLE_SIZE = 32

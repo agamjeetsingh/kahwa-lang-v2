@@ -95,7 +95,10 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
       val r2 = visitList(args)
       combine(r1, r2)
 
-    case MemberAccessExpr(base, _, _) => base.accept(this)
+    case MemberAccessExpr(base, ident, _) =>
+      val r1 = base.accept(this)
+      val r2 = ident.accept(this)
+      combine(r1, r2)
 
     case _: Ident | _: LiteralExpr | _: BreakExpr | _: ContinueExpr => defaultResult
     case BlockExpr(exprs, _) => visitList(exprs)

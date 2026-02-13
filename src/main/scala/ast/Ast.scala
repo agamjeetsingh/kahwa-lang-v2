@@ -162,10 +162,10 @@ case class CallExpr(
 
 case class MemberAccessExpr(
     base: Expr,
-    member: String,
+    member: Ident,
     range: SourceRange = SourceRange.dummy
 ) extends Expr {
-  override def prettyPrint: String = s"${base.prettyPrint}.$member"
+  override def prettyPrint: String = s"${base.prettyPrint}.${member.prettyPrint}"
 }
 
 case class BlockExpr(exprs: List[Expr], range: SourceRange = SourceRange.dummy) extends Expr {

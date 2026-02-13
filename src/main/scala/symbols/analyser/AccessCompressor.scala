@@ -8,7 +8,7 @@ object AccessCompressor extends AstTransformer {
       case MemberAccessExpr(base, member, range) =>
         transform(base) match {
           case ident: Ident =>
-            Ident(ident.head, ident.tail ++ List(member), expr.range)
+            Ident(ident.head, ident.tail ++ List(member.head) ++ member.tail, expr.range)
           case _ => super.transform(expr)
         }
       case _ => super.transform(expr)

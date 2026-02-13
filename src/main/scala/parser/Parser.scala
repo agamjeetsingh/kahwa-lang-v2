@@ -316,7 +316,7 @@ object Parser {
       ),
       Ops(Postfix)(
         (parseDot ~> parseIdentifier).map(ident =>
-          (e: Expr) => MemberAccessExpr(e, ident.value, e.range <-> ident.range)
+          (e: Expr) => MemberAccessExpr(e, Ident(ident.value, List.empty, ident.range), e.range <-> ident.range)
         )
       )
     )

@@ -15,8 +15,8 @@ object SemanticAnalyser {
   private[analyser] type MutableNodeToSymbol = mutable.Map[Decl, Symbol]
   private[analyser] type MutableIdentToSymbol = mutable.Map[Ident, Symbol]
   private[analyser] type MutableNodeToScope = mutable.Map[AstNode, Scope]
-  private[analyser] type MutableTypeRefToSemanticType =
-    mutable.Map[TypeRef, SemanticType]
+  private[analyser] type MutableTypeRefToSemanticType = mutable.Map[TypeRef, SemanticType]
+  private[analyser] type MutableExprToType = mutable.Map[Expr, SemanticType]
   def processFile(file: KahwaFile): (TranslationUnit, List[Diagnostic]) = {
     var kahwaFile = file
 
@@ -28,6 +28,7 @@ object SemanticAnalyser {
     given ListBuffer[Diagnostic] = diagnostics
 
     // Phase 2: Declare all top-level functions, top-level variables, classes, fields, methods and function/method parameters
+    // TODO - Linking of classes and objects
     val res = DeclareNames.declareFile(kahwaFile)
 
     // Phase 3: Provide a scope to every single AST Node
@@ -43,6 +44,10 @@ object SemanticAnalyser {
 
     // Phase 6: Replace each type def with the right type (TODO - Repair nodeToScope)
     kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSemanticType).transform(kahwaFile)
+
+    // Phase 7:
+    
+    TypeChecker(nodeToSymbol, nodeToScope.toMap, typeRefToSemanticType, diagnostics)
 
     (res, diagnostics.toList)
   }

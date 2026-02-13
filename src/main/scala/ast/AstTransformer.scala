@@ -10,7 +10,7 @@ class AstTransformer {
     case CallExpr(callee, args, range) =>
       CallExpr(transform(callee), args.map(transform), range)
     case MemberAccessExpr(base, member, range) =>
-      MemberAccessExpr(transform(base), member, range)
+      MemberAccessExpr(transform(base), transform(member), range)
     case BlockExpr(exprs, range) => BlockExpr(exprs.map(transform), range)
     case IfExpr(expr, ifBlock, elseBlock, range) =>
       IfExpr(transform(expr), transform(ifBlock), elseBlock.map(transform), range)
@@ -24,6 +24,8 @@ class AstTransformer {
   def transform(blockExpr: BlockExpr): BlockExpr = {
     blockExpr.copy(exprs = blockExpr.exprs.map(transform))
   }
+  
+  def transform(ident: Ident): Ident = ident
 
   def transform(typeRef: TypeRef): TypeRef = {
     typeRef match {

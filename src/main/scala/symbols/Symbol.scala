@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockExpr, Expr, Modifier, TypeRef, Variance}
+import ast.{BlockExpr, Modifier, TypeRef, Variance}
 import ast.Variance.INVARIANT
 import symbols.analyser.KahwaLangScope
 
@@ -74,7 +74,7 @@ class ObjectSymbol(override val name: String, outerScope: Scope) extends TermSym
 
 class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
   var semanticType: SemanticType = KahwaLangScope.ErrorType
-  val initExpr: Option[Expr] = None
+  val initExpr: Option[BoundExpr] = None
 }
 
 class VisibleVariableSymbol(override val name: String, outerScope: Scope) extends VariableSymbol(name, outerScope) {
@@ -88,7 +88,7 @@ class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleV
 class FunctionSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
   var visibility: Visibility = Visibility.default
 
-  var block: BlockExpr = BlockExpr(List.empty)
+  var block: BoundBlockExpr = BoundBlockExpr(List.empty, KahwaLangScope.NothingType)
 
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty
@@ -114,7 +114,76 @@ class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSy
   var visibility: Visibility = Visibility.default
 }
 
-case class SemanticType(
-    typeSymbol: TypeSymbol,
-    genericArguments: List[SemanticType] = List.empty
+class SemanticType(
+    val typeSymbol: TypeSymbol,
+    val genericArguments: List[SemanticType] = List.empty
 )
+
+sealed trait BoundExpr {
+  def semanticType: SemanticType
+}
+
+sealed trait BoundLiteralExpr extends BoundExpr
+
+case class BoundBoolLiteral(value: Boolean) extends BoundLiteralExpr {
+  override def semanticType: SemanticType = KahwaLangScope.BoolType
+}
+
+case class BoundFloatLiteral(value: Float) extends BoundLiteralExpr {
+  override def semanticType: SemanticType = KahwaLangScope.FloatType
+}
+
+case class BoundIntegerLiteral(value: Int) extends BoundLiteralExpr {
+  override def semanticType: SemanticType = KahwaLangScope.IntType
+}
+
+case class BoundStringLiteral(value: String) extends BoundLiteralExpr {
+  override def semanticType: SemanticType = KahwaLangScope.StringType
+}
+
+case class BoundVariable(variableSymbol: VariableSymbol, override val semanticType: SemanticType) extends BoundExpr
+
+case class FunctionCall(
+    functionSymbol: FunctionSymbol,
+    genericArguments: List[SemanticType],
+    args: BoundExpr,
+    override val semanticType: SemanticType
+) extends BoundExpr {
+  require(genericArguments.size == functionSymbol.genericArguments.size)
+}
+
+case class MethodCall(
+    methodSymbol: MethodSymbol,
+    target: BoundExpr,
+    genericArguments: List[SemanticType],
+    args: BoundExpr,
+    override val semanticType: SemanticType
+) extends BoundExpr {
+  require(genericArguments.size == methodSymbol.genericArguments.size)
+}
+
+case class FieldAccess(fieldSymbol: FieldSymbol, target: BoundExpr, override val semanticType: SemanticType)
+    extends BoundExpr
+
+case class BoundBlockExpr(exprs: List[BoundExpr], override val semanticType: SemanticType) extends BoundExpr
+
+case class IfExpr(
+    expr: BoundExpr,
+    ifBlock: BoundBlockExpr,
+    elseBlock: Option[BoundBlockExpr] = None,
+    override val semanticType: SemanticType
+) extends BoundExpr
+
+case class BoundWhileExpr(
+    cond: BoundExpr,
+    body: BoundBlockExpr,
+    override val semanticType: SemanticType
+) extends BoundExpr
+
+case class BoundBreak() extends BoundExpr {
+  override def semanticType: SemanticType = KahwaLangScope.NothingType
+}
+
+case class BoundContinue() extends BoundExpr {
+  override def semanticType: SemanticType = KahwaLangScope.NothingType
+}
