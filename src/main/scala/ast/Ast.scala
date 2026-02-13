@@ -416,7 +416,13 @@ case class ClassDecl(
     s"${modifiers.prettyPrint}class $name${typeParameters.prettyPrint}${
         if superClasses.isEmpty then ""
         else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
-      } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n${nestedObjects.map(_.prettyPrint).mkString("\n")}\n}"
+      } {\n${fields.map(_.prettyPrint).mkString("\n")}${
+        if fields.isEmpty then "" else "\n"
+      }${methods.map(_.prettyPrint).mkString("\n")}${
+        if methods.isEmpty then "" else "\n"
+      }${nestedClasses.map(_.prettyPrint).mkString("\n")}${
+        if nestedClasses.isEmpty then "" else "\n"
+      }${nestedObjects.map(_.prettyPrint).mkString("\n")}${if nestedObjects.isEmpty then "" else "\n"}}"
 }
 
 case class ObjectDecl(
@@ -433,7 +439,13 @@ case class ObjectDecl(
     s"${modifiers.prettyPrint}object $name${
         if superClasses.isEmpty then ""
         else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
-      } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n${nestedObjects.map(_.prettyPrint).mkString("\n")}\n}"
+      } {\n${fields.map(_.prettyPrint).mkString("\n")}${
+        if fields.isEmpty then "" else "\n"
+      }${methods.map(_.prettyPrint).mkString("\n")}${
+        if methods.isEmpty then "" else "\n"
+      }${nestedClasses.map(_.prettyPrint).mkString("\n")}${
+        if nestedClasses.isEmpty then "" else "\n"
+      }${nestedObjects.map(_.prettyPrint).mkString("\n")}${if nestedObjects.isEmpty then "" else "\n"}}"
 }
 
 case class KahwaFile(
@@ -441,7 +453,7 @@ case class KahwaFile(
     classDecls: List[ClassDecl] = List.empty,
     objectDecls: List[ObjectDecl] = List.empty,
     functionDecls: List[FunctionDecl] = List.empty,
-    variableDecls: List[VariableDecl] = List.empty,
+    variableDecls: List[FieldDecl] = List.empty,
     range: SourceRange = SourceRange.dummy
 ) extends Decl {
   override def prettyPrint: String =

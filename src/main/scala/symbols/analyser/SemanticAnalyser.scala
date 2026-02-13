@@ -22,9 +22,10 @@ object SemanticAnalyser {
 
     // Phase 1: Compress member access expressions to idents ((a.b).c) -> (a.b.c)
     kahwaFile = AccessCompressor.transform(kahwaFile)
-
-    given nodeToSymbol: MutableNodeToSymbol = mutable.Map()
-    given diagnostics: ListBuffer[Diagnostic] = ListBuffer()
+    val nodeToSymbol: MutableNodeToSymbol = mutable.Map()
+    given MutableNodeToSymbol = nodeToSymbol
+    val diagnostics: ListBuffer[Diagnostic] = ListBuffer()
+    given ListBuffer[Diagnostic] = diagnostics
 
     // Phase 2: Declare all top-level functions, top-level variables, classes, fields, methods and function/method parameters
     val res = DeclareNames.declareFile(kahwaFile)
@@ -33,24 +34,15 @@ object SemanticAnalyser {
     val nodeToScope: MutableNodeToScope =
       AstScopeGenerator(nodeToSymbol.toMap).visitKahwaFile(kahwaFile)
 
-    // Phase 4: Build a map from TypeRefs to Symbols
-//    val typeRefToSymbol: MutableTypeRefToSemanticType =
-//      TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(
-//        kahwaFile
-//      )
+    // Phase 4: Build a map from TypeRefs to Semantic Types
+    val typeRefToSemanticType: MutableTypeRefToSemanticType =
+      TypeRefQualifier(nodeToScope.toMap, nodeToSymbol).visitKahwaFile(kahwaFile)
 
     // Phase 5: Detect cycles in the typedefs
-    diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
+//    diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
 
     // Phase 6: Replace each type def with the right type (TODO - Repair nodeToScope)
-//    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSymbol)
-//      .transform(kahwaFile)
-
-    // Phase 7: Resolve all typeRefs to semantic types except for the ones in method bodies
-    // TODO - Can be simplified a lot by using the nodeToScope map
-//    diagnostics ++= PartialTypeResolver
-//      .TypeResolver(nodeToSymbol.toMap, nodeToScope.toMap)
-//      .visitKahwaFile(kahwaFile)
+    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSemanticType).transform(kahwaFile)
 
     (res, diagnostics.toList)
   }

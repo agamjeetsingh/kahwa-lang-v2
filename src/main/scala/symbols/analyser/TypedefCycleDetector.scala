@@ -54,14 +54,15 @@ private object TypedefCycleDetector {
       typedefSymbol: TypedefSymbol
   )(using nodeToSymbol: MutableNodeToSymbol): List[TypedefSymbol] = {
     val semanticType = typedefSymbol.referredType
-    (semanticType.typeSymbol match {
-      case typedefSymbol: TypedefSymbol => List(typedefSymbol)
-      case _ => List.empty
-    }) ++ semanticType.genericArguments.collect { arg =>
-      arg.typeSymbol match {
-        case typedefSymbol: TypedefSymbol => typedefSymbol
-      }
-    }
-      .flatMap(getTypedefDependencies)
+    ???
+//    (semanticType.typeSymbol match {
+//      case typedefSymbol: TypedefSymbol => List(typedefSymbol)
+//      case _ => List.empty
+//    }) ++ semanticType.genericArguments.collect { arg =>
+//      arg.typeSymbol match {
+//        case typedefSymbol: TypedefSymbol => typedefSymbol
+//      }
+//    }
+//      .flatMap(getTypedefDependencies)
   }
 }

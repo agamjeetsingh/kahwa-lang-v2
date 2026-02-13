@@ -2,6 +2,7 @@ package symbols
 
 import ast.{BlockExpr, Expr, Modifier, TypeRef, Variance}
 import ast.Variance.INVARIANT
+import symbols.analyser.KahwaLangScope
 
 import scala.collection.mutable.ListBuffer
 
@@ -57,10 +58,22 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
   val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
   val fields: ListBuffer[FieldSymbol] = ListBuffer.empty
   val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
+  val nestedObjects: ListBuffer[ObjectSymbol] = ListBuffer.empty
+  val linkedObject: Option[ObjectSymbol] = None
+}
+
+class ObjectSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope), Modal {
+  var visibility: Visibility = Visibility.default
+  val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
+  val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
+  val fields: ListBuffer[FieldSymbol] = ListBuffer.empty
+  val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
+  val nestedObjects: ListBuffer[ObjectSymbol] = ListBuffer.empty
+  val linkedClass: Option[ClassSymbol] = None
 }
 
 class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
-  var semanticType: SemanticType = GlobalScope.ErrorType
+  var semanticType: SemanticType = KahwaLangScope.ErrorType
   val initExpr: Option[Expr] = None
 }
 
@@ -80,7 +93,7 @@ class FunctionSymbol(override val name: String, outerScope: Scope) extends TermS
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty
 
-  var returnType: SemanticType = GlobalScope.ErrorType
+  var returnType: SemanticType = KahwaLangScope.ErrorType
 }
 
 class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope), Modal {
@@ -89,6 +102,7 @@ class MethodSymbol(override val name: String, outerScope: Scope) extends Functio
 
 class TranslationUnit(override val name: String, outerScopes: List[Scope]) extends Symbol(name, outerScopes) {
   val classes: ListBuffer[ClassSymbol] = ListBuffer.empty
+  val objects: ListBuffer[ObjectSymbol] = ListBuffer.empty
   val functions: ListBuffer[FunctionSymbol] = ListBuffer.empty
   val variables: ListBuffer[VisibleVariableSymbol] = ListBuffer.empty
   val typedefs: ListBuffer[TypedefSymbol] = ListBuffer.empty
@@ -96,7 +110,7 @@ class TranslationUnit(override val name: String, outerScopes: List[Scope]) exten
 
 class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
-  var referredType: SemanticType = GlobalScope.ErrorType
+  var referredType: SemanticType = KahwaLangScope.ErrorType
   var visibility: Visibility = Visibility.default
 }
 

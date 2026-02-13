@@ -4,10 +4,12 @@ import ast.Modifier.{OVERRIDE, PRIVATE, PROTECTED, PUBLIC}
 import ast.{
   ClassDecl,
   Decl,
+  FieldDecl,
   FunctionDecl,
   KahwaFile,
   Modifier,
   ModifierNode,
+  ObjectDecl,
   TypeParameterDecl,
   TypedefDecl,
   VariableDecl
@@ -20,6 +22,7 @@ import symbols.{
   FieldSymbol,
   FunctionSymbol,
   MethodSymbol,
+  ObjectSymbol,
   Scope,
   Symbol,
   TranslationUnit,
@@ -45,22 +48,21 @@ private object DeclareNames {
     registerType(
       translationUnit,
       kahwaFile.classDecls,
-      classDecl =>
-        (
-          declareClass(classDecl, translationUnit.scope, true),
-          SourceRange.dummy
-        ),
+      classDecl => declareClass(classDecl, translationUnit.scope, true),
       translationUnit.classes += _
     )
 
     registerTerm(
       translationUnit,
+      kahwaFile.objectDecls,
+      objectDecl => declareObject(objectDecl, translationUnit.scope, true),
+      translationUnit.objects += _
+    )
+
+    registerTerm(
+      translationUnit,
       kahwaFile.functionDecls,
-      functionDecl =>
-        (
-          declareFunction(functionDecl, translationUnit.scope),
-          SourceRange.dummy
-        ),
+      functionDecl => declareFunction(functionDecl, translationUnit.scope),
       translationUnit.functions += _,
       duplicatesAllowed = true
     )
@@ -68,20 +70,18 @@ private object DeclareNames {
     registerType(
       translationUnit,
       kahwaFile.variableDecls,
-      variableDecl =>
-        (
-          declareVisibleVariable(variableDecl, translationUnit.scope),
-          SourceRange.dummy
-        ),
+      fieldDecl => declareVisibleVariable(fieldDecl, translationUnit.scope),
       translationUnit.variables += _
     )
 
     registerType(
       translationUnit,
       kahwaFile.typedefDecls,
-      typedefDecl => (declareTypedef(typedefDecl, translationUnit.scope), SourceRange.dummy),
+      typedefDecl => declareTypedef(typedefDecl, translationUnit.scope),
       translationUnit.typedefs += _
     )
+    
+    nodeToSymbol += kahwaFile -> translationUnit
 
     translationUnit
   }
@@ -89,15 +89,15 @@ private object DeclareNames {
   private def register[T <: Decl, U <: Symbol](
       parentSymbol: Symbol,
       decls: List[T],
-      declToSymbolAndRange: T => (U, SourceRange),
+      declToSymbol: T => U,
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean,
       term: Boolean
   )(using nodeToSymbol: MutableNodeToSymbol): List[Diagnostic] = {
-    val ts = decls.map(decl => (declToSymbolAndRange(decl), decl))
+    val ts = decls.map(decl => (declToSymbol(decl), decl.range, decl))
 
     ts.flatMap(tuple => {
-      val ((childSymbol, range), decl) = tuple
+      val (childSymbol, range, decl) = tuple
       val badDuplicate = !duplicatesAllowed && ((term && parentSymbol.scope
         .searchForTerm(childSymbol.name)
         .nonEmpty)
@@ -118,7 +118,7 @@ private object DeclareNames {
   private def registerTerm[T <: Decl, U <: Symbol](
       parentSymbol: Symbol,
       decls: List[T],
-      declToSymbolAndRange: T => (U, SourceRange),
+      declToSymbolAndRange: T => U,
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean = false
   )(using
@@ -138,7 +138,7 @@ private object DeclareNames {
   private def registerType[T <: Decl, U <: Symbol](
       parentSymbol: Symbol,
       decls: List[T],
-      declToSymbolAndRange: T => (U, SourceRange),
+      declToSymbolAndRange: T => U,
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean = false
   )(using
@@ -169,42 +169,38 @@ private object DeclareNames {
       classSymbol,
       classDecl.typeParameters,
       (typeParameterDecl: TypeParameterDecl) =>
-        (
-          TypeParameterSymbol(
-            typeParameterDecl.name,
-            classSymbol.scope,
-            typeParameterDecl.variance
-          ),
-          typeParameterDecl.range
-        ),
+        TypeParameterSymbol(typeParameterDecl.name, classSymbol.scope, typeParameterDecl.variance),
       classSymbol.genericArguments += _
     )
 
     registerType(
       classSymbol,
       classDecl.nestedClasses,
-      nestedClassDecl =>
-        (
-          declareClass(nestedClassDecl, classSymbol.scope, false),
-          classDecl.range
-        ),
+      nestedClassDecl => declareClass(nestedClassDecl, classSymbol.scope, false),
       classSymbol.nestedClasses += _
     )
 
     registerTerm(
       classSymbol,
+      classDecl.nestedObjects,
+      nestedObjectDecl => declareObject(nestedObjectDecl, classSymbol.scope, false),
+      classSymbol.nestedObjects += _
+    )
+
+    registerTerm(
+      classSymbol,
       classDecl.methods,
-      methodDecl => (declareMethod(methodDecl, classSymbol.scope), methodDecl.range),
+      methodDecl => declareMethod(methodDecl, classSymbol.scope),
       classSymbol.methods += _,
       duplicatesAllowed = true
     )
 
-//    registerTerm(
-//      classSymbol,
-//      classDecl.fields,
-//      variableDecl => (declareField(variableDecl, classSymbol.scope), variableDecl.range),
-//      classSymbol.fields += _
-//    )
+    registerTerm(
+      classSymbol,
+      classDecl.fields,
+      fieldDecl => declareField(fieldDecl, classSymbol.scope),
+      classSymbol.fields += _
+    )
 
     classSymbol.visibility = resolveVisibility(classDecl.modifiers, topLevel)
 
@@ -218,6 +214,50 @@ private object DeclareNames {
     classSymbol
   }
 
+  private def declareObject(objectDecl: ObjectDecl, outerScope: Scope, topLevel: Boolean)(using
+      nodeToSymbol: MutableNodeToSymbol,
+      diagnostics: ListBuffer[Diagnostic]
+  ): ObjectSymbol = {
+    val objectSymbol = ObjectSymbol(objectDecl.name, outerScope)
+
+    registerType(
+      objectSymbol,
+      objectDecl.nestedClasses,
+      nestedClassDecl => declareClass(nestedClassDecl, objectSymbol.scope, false),
+      objectSymbol.nestedClasses += _
+    )
+
+    registerTerm(
+      objectSymbol,
+      objectDecl.nestedObjects,
+      nestedObjectDecl => declareObject(nestedObjectDecl, objectSymbol.scope, false),
+      objectSymbol.nestedObjects += _
+    )
+
+    registerTerm(
+      objectSymbol,
+      objectDecl.methods,
+      methodDecl => declareMethod(methodDecl, objectSymbol.scope),
+      objectSymbol.methods += _,
+      duplicatesAllowed = true
+    )
+
+    registerTerm(
+      objectSymbol,
+      objectDecl.fields,
+      fieldDecl => declareField(fieldDecl, objectSymbol.scope),
+      objectSymbol.fields += _
+    )
+
+    objectSymbol.visibility = resolveVisibility(objectDecl.modifiers, topLevel)
+
+    modifierNotAllowed(objectDecl.modifiers, _ == Modifier.OVERRIDE)
+
+    objectSymbol.setModality(resolveModality(objectDecl.modifiers))
+
+    objectSymbol
+  }
+
   private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope)(using
       nodeToSymbol: MutableNodeToSymbol,
       diagnostics: ListBuffer[Diagnostic]
@@ -228,25 +268,14 @@ private object DeclareNames {
       functionSymbol,
       functionDecl.typeParameters,
       (typeParameterDecl: TypeParameterDecl) =>
-        (
-          TypeParameterSymbol(
-            typeParameterDecl.name,
-            functionSymbol.scope,
-            typeParameterDecl.variance
-          ),
-          typeParameterDecl.range
-        ),
+        TypeParameterSymbol(typeParameterDecl.name, functionSymbol.scope, typeParameterDecl.variance),
       functionSymbol.genericArguments += _
     )
 
     registerTerm(
       functionSymbol,
       functionDecl.parameters,
-      variableDecl =>
-        (
-          declareVariable(variableDecl, functionSymbol.scope),
-          variableDecl.range
-        ),
+      variableDecl => declareVariable(variableDecl, functionSymbol.scope),
       functionSymbol.parameters += _
     )
 
@@ -270,14 +299,7 @@ private object DeclareNames {
       typedefSymbol,
       typedefDecl.typeParameters,
       (typeParameterDecl: TypeParameterDecl) =>
-        (
-          TypeParameterSymbol(
-            typeParameterDecl.name,
-            typedefSymbol.scope,
-            typeParameterDecl.variance
-          ),
-          typeParameterDecl.range
-        ),
+        TypeParameterSymbol(typeParameterDecl.name, typedefSymbol.scope, typeParameterDecl.variance),
       typedefSymbol.genericArguments += _
     )
 
@@ -297,21 +319,14 @@ private object DeclareNames {
       methodSymbol,
       functionDecl.typeParameters,
       (typeParameterDecl: TypeParameterDecl) =>
-        (
-          TypeParameterSymbol(
-            typeParameterDecl.name,
-            methodSymbol.scope,
-            typeParameterDecl.variance
-          ),
-          typeParameterDecl.range
-        ),
+        TypeParameterSymbol(typeParameterDecl.name, methodSymbol.scope, typeParameterDecl.variance),
       methodSymbol.genericArguments += _
     )
 
     registerTerm(
       methodSymbol,
       functionDecl.parameters,
-      variableDecl => (declareVariable(variableDecl, methodSymbol.scope), variableDecl.range),
+      variableDecl => declareVariable(variableDecl, methodSymbol.scope),
       methodSymbol.parameters += _
     )
 
@@ -329,39 +344,37 @@ private object DeclareNames {
   ): VariableSymbol = {
     val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
     
-//    modifierNotAllowed(variableDecl.modifiers, _ != Modifier.STATIC)
-
     variableSymbol
   }
 
   private def declareVisibleVariable(
-      variableDecl: VariableDecl,
+      fieldDecl: FieldDecl,
       outerScope: Scope
   )(using diagnostics: ListBuffer[Diagnostic]): VisibleVariableSymbol = {
     val visibleVariableSymbol =
-      VisibleVariableSymbol(variableDecl.name, outerScope)
-    
+      VisibleVariableSymbol(fieldDecl.name, outerScope)
+
     visibleVariableSymbol.visibility =
-      resolveVisibility(variableDecl.modifiers, true)
+      resolveVisibility(fieldDecl.modifiers, true)
 
     modifierNotAllowed(
-      variableDecl.modifiers,
+      fieldDecl.modifiers,
       modifier => modifier.isModality || modifier == OVERRIDE
     )
 
     visibleVariableSymbol
   }
 
-  private def declareField(variableDecl: VariableDecl, outerScope: Scope)(using
+  private def declareField(fieldDecl: FieldDecl, outerScope: Scope)(using
       diagnostics: ListBuffer[Diagnostic]
   ): FieldSymbol = {
-    val fieldSymbol = FieldSymbol(variableDecl.name, outerScope)
+    val fieldSymbol = FieldSymbol(fieldDecl.name, outerScope)
 
-    fieldSymbol.visibility = resolveVisibility(variableDecl.modifiers, true)
+    fieldSymbol.visibility = resolveVisibility(fieldDecl.modifiers, true)
 
-    fieldSymbol.setModality(resolveModality(variableDecl.modifiers))
+    fieldSymbol.setModality(resolveModality(fieldDecl.modifiers))
     fieldSymbol.isAnOverride =
-      hasModifier(variableDecl.modifiers, Modifier.OVERRIDE)
+      hasModifier(fieldDecl.modifiers, Modifier.OVERRIDE)
 
     fieldSymbol
   }

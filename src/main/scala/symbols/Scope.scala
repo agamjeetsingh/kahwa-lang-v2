@@ -144,7 +144,3 @@ class Scope {
   private val outerScopes: mutable.ListBuffer[Scope] = mutable.ListBuffer.empty
 }
 
-object GlobalScope extends Scope {
-  val ErrorTypeSymbol: TypeSymbol = TypeSymbol("Error-Type", GlobalScope)
-  val ErrorType: SemanticType = SemanticType(ErrorTypeSymbol)
-}

@@ -12,76 +12,6 @@ import symbols.analyser.AccessCompressor
 import symbols.analyser.SemanticAnalyser
 
 @main
-def lun(): Unit = {
-  given SafePointFunction[Token] = Parser.isSafePointForFile
-
-  val _ = Tokeniser.tokenise("", 0)
-  val (input, ds) = Tokeniser.tokenise(
-    """typedef MyInt = Int; typedef Integer[T] = List[T]; public class NumberSequence[A] : Iterable[Integer] {
-
-                                             private final Function[Integer, Integer] term;
-
-                                             public Integer term(Integer n) {
-                                                 return term.apply(n);
-                                             }
-
-                                             public Iterator[Integer[XXX]] iterator() {
-                                                 return SequenceIterator();
-                                             }
-
-                                             private class SequenceIterator : Iterator[Integer] {
-
-                                                 override private int index = 0;
-
-                                                 public boolean hasNext() {
-                                                     return true;
-                                                 }
-
-                                                 private Integer next() {
-                                                     return term.apply(index++);
-                                                 }
-                                             }
-                                         }
-
-                                         typedef MyInt = Int; typedef Integer[T] = List[T]; public class NumberSequence[A] : Iterable[Integer] {
-
-                                             private final Function[Integer, Integer] term;
-
-                                             public Integer term(Integer n) {
-                                                 return term.apply(n);
-                                             }
-
-                                             public Iterator[Integer[XXX]] iterator() {
-                                                 return SequenceIterator();
-                                             }
-
-                                             private class SequenceIterator : Iterator[Integer] {
-
-                                                 override private int index = 0;
-
-                                                 public boolean hasNext() {
-                                                     return true;
-                                                 }
-
-                                                 private Integer next() {
-                                                     return term.apply(index++);
-                                                 }
-                                             }
-                                         }
-                                         """.stripMargin.stripIndent(),
-    0
-  )
-  println(s"Tokenisation diagnostics: ${ds.map(_.msg)}")
-  val prog = Parser.parseKahwaFile(input)
-  println(s"Parsing diagnostics: ${prog._3.map(_.msg)}")
-  println(prog._1.get.prettyPrint)
-
-//  val (tu, ds1) = SemanticAnalyser.processFile(prog._1.get)
-//  println(s"Semantic analysis diagnostics: ${ds1.map(_.msg)}")
-//  val x = 1
-}
-
-@main
 def main(): Unit = {
   val (input, _) = Tokeniser.tokenise("a.c.d", 0)
   given SafePointFunction[Token] = Parser.isSafePointForFile
@@ -93,6 +23,8 @@ def main(): Unit = {
 object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
   private type SafePointFunc = SafePointFunction[Token]
+  
+  given SafePointFunc = tok => false
 
   val isSafePointForFile: SafePointFunc = {
     case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) =>
@@ -288,7 +220,9 @@ object Parser {
       parseIfExpr,
       parseWhileExpr,
       parseVariableDecl,
-      spanned((parseLeftParen ~> sepBy(parseParameter, parseComma) <~ parseRightParen <~ parseArrow) ~ delay(parseExpr)).map { tuple =>
+      spanned(
+        (parseLeftParen ~> sepBy(parseParameter, parseComma) <~ parseRightParen <~ parseArrow) ~ delay(parseExpr)
+      ).map { tuple =>
         val ((paramList, body), range) = tuple
         LambdaExpr(paramList, body, range)
       },
@@ -510,7 +444,31 @@ object Parser {
     })
   }
 
-  lazy val parseObjectDecl: SafePointFunc ?=> Parsel[ObjectDecl, Token, Diagnostic] = ???
+  lazy val parseObjectDecl: SafePointFunc ?=> Parsel[ObjectDecl, Token, Diagnostic] =
+    spanned(
+      (list(parseModifierNode) <~ parseObjectTok) ~ parseIdentifier ~
+        optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
+        (parseLeftCurlyBrace ~> list(
+          or(
+            delay(parseClassDecl),
+            parseFunctionDecl,
+            parseFieldDecl <~ parseSemiColon,
+            delay(parseObjectDecl)
+          )
+        ) <~ parseRightCurlyBrace)
+    ).map { tuple =>
+      val ((((modifierNodes, identifier), optionalSuperClasses), objectMembers), range) = tuple
+      ObjectDecl(
+        identifier.value,
+        modifierNodes,
+        optionalSuperClasses.getOrElse(Nil),
+        objectMembers.collect { case decl: FieldDecl => decl },
+        objectMembers.collect { case decl: FunctionDecl => decl },
+        objectMembers.collect { case decl: ClassDecl => decl },
+        objectMembers.collect { case decl: ObjectDecl => decl },
+        range
+      )
+    }
 
   lazy val parseClassDecl: SafePointFunc ?=> Parsel[ClassDecl, Token, Diagnostic] = {
     spanned(
@@ -522,20 +480,11 @@ object Parser {
             delay(parseClassDecl),
             parseFunctionDecl,
             parseFieldDecl <~ parseSemiColon,
-            parseObjectDecl
+            delay(parseObjectDecl)
           )
         ) <~ parseRightCurlyBrace)
     ).map(tuple => {
-      val (
-        (
-          (
-            ((modifierNodes, identifier), optionalTypeParameters),
-            optionalSuperClasses
-          ),
-          classMembers
-        ),
-        range
-      ) = tuple
+      val (((((modifierNodes, identifier), optionalTypeParameters), optionalSuperClasses), classMembers), range) = tuple
       ClassDecl(
         identifier.value,
         modifierNodes,
@@ -558,7 +507,7 @@ object Parser {
           parseClassDecl,
           parseObjectDecl,
           parseFunctionDecl,
-          parseVariableDecl <~ parseSemiColon
+          parseFieldDecl <~ parseSemiColon
         )
       )
     ).map(tuple => {
@@ -568,7 +517,7 @@ object Parser {
         fileMembers.collect { case decl: ClassDecl => decl },
         fileMembers.collect { case decl: ObjectDecl => decl },
         fileMembers.collect { case decl: FunctionDecl => decl },
-        fileMembers.collect { case decl: VariableDecl => decl },
+        fileMembers.collect { case decl: FieldDecl => decl },
         range
       )
     })
