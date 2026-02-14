@@ -1,6 +1,6 @@
 package symbols
 
-import ast.Ident
+import ast.{ExprIdent, Ident}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -15,6 +15,14 @@ class Scope {
 
   def searchCurrentForTerm(name: String): List[TermSymbol] = {
     termSymbolTable.getOrElse(name, Nil).toList
+  }
+  
+  def searchForType(exprIdent: ExprIdent): List[TypeSymbol] = {
+    searchForType(Ident(exprIdent.head, exprIdent.tail, exprIdent.range))
+  }
+  
+  def searchForTerm(exprIdent: ExprIdent): List[TermSymbol] = {
+    searchForTerm(Ident(exprIdent.head, exprIdent.tail, exprIdent.range))
   }
 
   def searchForType(ident: Ident): List[TypeSymbol] = {
@@ -138,8 +146,8 @@ class Scope {
     outerScopes += outerScope
   }
 
-  private val typeSymbolTable: SymbolTable[TypeSymbol] = mutable.Map.empty
-  private val termSymbolTable: SymbolTable[TermSymbol] = mutable.Map.empty
+  protected val typeSymbolTable: SymbolTable[TypeSymbol] = mutable.Map.empty
+  protected val termSymbolTable: SymbolTable[TermSymbol] = mutable.Map.empty
 
   private val outerScopes: mutable.ListBuffer[Scope] = mutable.ListBuffer.empty
 }

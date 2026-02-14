@@ -39,6 +39,16 @@ case class Ident(
     head: String,
     tail: List[String] = List.empty,
     range: SourceRange = SourceRange.dummy
+) extends AstNode {
+  override def prettyPrint: String = (head :: tail).mkString(".")
+
+  def name: String = (head :: tail).last
+}
+
+case class ExprIdent(
+    head: String,
+    tail: List[String] = List.empty,
+    range: SourceRange = SourceRange.dummy
 ) extends Expr {
   override def prettyPrint: String = (head :: tail).mkString(".")
 
@@ -162,7 +172,7 @@ case class CallExpr(
 
 case class MemberAccessExpr(
     base: Expr,
-    member: Ident,
+    member: ExprIdent,
     range: SourceRange = SourceRange.dummy
 ) extends Expr {
   override def prettyPrint: String = s"${base.prettyPrint}.${member.prettyPrint}"

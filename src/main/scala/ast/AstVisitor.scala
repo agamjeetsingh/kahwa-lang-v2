@@ -17,6 +17,7 @@ trait Visitor[R] {
   def visitFunctionDecl(node: FunctionDecl): R
   def visitClassDecl(node: ClassDecl): R
   def visitObjectDecl(node: ObjectDecl): R
+  def visitIdent(node: Ident): R
 
   // Other nodes
   def visitTypeRef(node: TypeRef): R
@@ -47,6 +48,7 @@ extension (node: AstNode) {
     // Other nodes
     case n: TypeRef => visitor.visitTypeRef(n)
     case n: ModifierNode => visitor.visitModifierNode(n)
+    case n: Ident => visitor.visitIdent(n)
   }
 }
 
@@ -120,6 +122,7 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
       val r1 = visitOption(typeRef)
       val r2 = visitOption(initExpr)
       combine(r1, r2)
+    case ExprIdent(head, tail, range) => defaultResult
   }
 
   // ===== Declarations =====
@@ -193,6 +196,8 @@ abstract class TraversingVisitor[R] extends Visitor[R] {
       }
     }
   }
+
+  override def visitIdent(node: Ident): R = defaultResult
 
   def visitModifierNode(node: ModifierNode): R = defaultResult
 

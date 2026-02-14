@@ -2,7 +2,8 @@ package symbols.analyser
 
 import ast.*
 import diagnostics.Diagnostic
-import symbols.{Scope, SemanticType, Symbol, TranslationUnit, TypeSymbol}
+import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType}
+import symbols.{BoundExpr, Scope, SemanticType, Symbol, TranslationUnit, TypeSymbol}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -43,12 +44,29 @@ object SemanticAnalyser {
 //    diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
 
     // Phase 6: Replace each type def with the right type (TODO - Repair nodeToScope)
-    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSemanticType).transform(kahwaFile)
+//    kahwaFile = TypedefReplacer(kahwaFile.typedefDecls, typeRefToSemanticType).transform(kahwaFile)
 
     // Phase 7:
-    
-    TypeChecker(nodeToSymbol, nodeToScope.toMap, typeRefToSemanticType, diagnostics)
+
+    val boundExprs = TypeCheck(nodeToSymbol, nodeToScope.toMap, typeRefToSemanticType, diagnostics).visitKahwaFile(kahwaFile)
+    println(boundExprs)
 
     (res, diagnostics.toList)
+  }
+}
+
+class TypeCheck(
+    val nodeToSymbol: MutableNodeToSymbol,
+    val nodeToScope: NodeToScope,
+    val typeRefToSemanticType: MutableTypeRefToSemanticType,
+    val diagnostics: ListBuffer[Diagnostic]
+) extends TraversingVisitor[List[BoundExpr]] {
+
+  override protected def defaultResult: List[BoundExpr] = List.empty
+
+  override protected def combine(r1: List[BoundExpr], r2: List[BoundExpr]): List[BoundExpr] = r1 ++ r2
+
+  override def visitExpr(node: Expr): List[BoundExpr] = {
+    List(TypeChecker(nodeToSymbol, nodeToScope, typeRefToSemanticType, diagnostics).check(node))
   }
 }

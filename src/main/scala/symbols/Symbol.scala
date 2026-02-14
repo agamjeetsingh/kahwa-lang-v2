@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockExpr, Modifier, TypeRef, Variance}
+import ast.{BlockExpr, Modifier, PrettyPrintable, TypeRef, Variance}
 import ast.Variance.INVARIANT
 import symbols.analyser.KahwaLangScope
 
@@ -27,7 +27,9 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
   }
 }
 
-sealed class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope)
+sealed class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope), PrettyPrintable {
+  override def prettyPrint: String = name
+}
 
 sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
@@ -114,10 +116,30 @@ class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSy
   var visibility: Visibility = Visibility.default
 }
 
-class SemanticType(
-    val typeSymbol: TypeSymbol,
-    val genericArguments: List[SemanticType] = List.empty
-)
+case class SemanticType(
+    typeSymbol: TypeSymbol,
+    genericArguments: List[SemanticType] = List.empty
+) extends PrettyPrintable {
+  override def prettyPrint: String =
+    s"${typeSymbol.prettyPrint}${genericArguments.map(_.prettyPrint).mkString("[", ", ", "]")}"
+}
+
+object SemanticType {
+  extension (t1: SemanticType) {
+    infix def <(t2: SemanticType): Boolean = {
+      if (t2 == KahwaLangScope.AnyType || t2 == KahwaLangScope.ErrorType) return true
+      if (t1 == KahwaLangScope.NothingType || t2 == KahwaLangScope.NothingType) return true
+      (t1, t2) match {
+        case (SemanticType(typeSymbol1, genericArguments1), SemanticType(typeSymbol2, genericArguments2)) =>
+          if (typeSymbol1 == typeSymbol2) {
+            ???
+          } else {
+            ???
+          }
+      }
+    }
+  }
+}
 
 sealed trait BoundExpr {
   def semanticType: SemanticType
@@ -186,4 +208,13 @@ case class BoundBreak() extends BoundExpr {
 
 case class BoundContinue() extends BoundExpr {
   override def semanticType: SemanticType = KahwaLangScope.NothingType
+}
+
+case class BoundVariableDecl(
+    name: String,
+    varType: SemanticType,
+    readOnly: Boolean,
+    initExpr: Option[BoundExpr] = None,
+) extends BoundExpr {
+  override def semanticType: SemanticType = KahwaLangScope.UnitType
 }

@@ -1,34 +1,11 @@
 package symbols.analyser
 
-import ast.{
-  AstNode,
-  BinaryExpr,
-  BlockExpr,
-  BreakExpr,
-  CallExpr,
-  ClassDecl,
-  ContinueExpr,
-  Decl,
-  Expr,
-  FunctionDecl,
-  Ident,
-  IfExpr,
-  KahwaFile,
-  LambdaExpr,
-  LiteralExpr,
-  MemberAccessExpr,
-  TraversingVisitor,
-  TupleExpr,
-  TypeRef,
-  TypedefDecl,
-  UnaryExpr,
-  VariableDecl,
-  WhileExpr
-}
+import ast.{AstNode, BinaryExpr, BlockExpr, BreakExpr, CallExpr, ClassDecl, ContinueExpr, Decl, Expr, FunctionDecl, Ident, IfExpr, KahwaFile, LambdaExpr, LiteralExpr, MemberAccessExpr, TraversingVisitor, TupleExpr, TypeRef, TypedefDecl, UnaryExpr, VariableDecl, WhileExpr}
 import symbols.Scope
 import symbols.analyser.SemanticAnalyser.MutableNodeToScope
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisitor[MutableNodeToScope] {
 
@@ -50,9 +27,6 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
   override def visitFunctionDecl(node: FunctionDecl): MutableNodeToScope =
     withScopeFrom(node, super.visitFunctionDecl)
 
-  override def visitVariableDecl(node: VariableDecl): MutableNodeToScope =
-    withScopeFrom(node, super.visitVariableDecl)
-
   override def visitTypedefDecl(node: TypedefDecl): MutableNodeToScope =
     withScopeFrom(node, super.visitTypedefDecl)
 
@@ -64,6 +38,14 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
     }
   }
 
+  override def visitVariableDecl(node: VariableDecl): MutableNodeToScope = {
+    addAndRecurse(node, super.visitVariableDecl)
+  }
+
+  override def visitIdent(node: Ident): MutableNodeToScope = {
+    addAndRecurse(node, super.visitIdent)
+  }
+
   override def visitTypeRef(node: TypeRef): MutableNodeToScope =
     addAndRecurse(node, super.visitTypeRef)
 
@@ -71,29 +53,26 @@ class AstScopeGenerator(val nodeToSymbol: NodeToSymbol) extends TraversingVisito
       node: T,
       recurse: T => MutableNodeToScope
   ): MutableNodeToScope = {
-    recurse(node) ++ mutable.Map(node -> stack.top)
+
+    recurse(node) ++ mutable.Map(node -> stack.last)
   }
 
   private def withScopeFrom[T <: Decl](
       node: T,
       recurse: T => MutableNodeToScope
   ): MutableNodeToScope = {
-    stack.push(nodeToSymbol(node).scope)
-    try {
-      recurse(node) ++ mutable.Map(node -> nodeToSymbol(node).scope)
-    } finally {
-      stack.pop()
-    }
+    stack += nodeToSymbol.get(node).map(_.scope).getOrElse(Scope())
+    val res = recurse(node)
+    stack.remove(stack.length - 1)
+    res ++ stack.lastOption.map(node -> _)
   }
 
-  private def withScopeFromBlock(node: BlockExpr, recurse: Expr => MutableNodeToScope): MutableNodeToScope = {
-    stack.push(node.scope)
-    try {
-      recurse(node) ++ mutable.Map(node -> node.scope)
-    } finally {
-      stack.pop()
-    }
+  private def withScopeFromBlock(node: BlockExpr, recurse: BlockExpr => MutableNodeToScope): MutableNodeToScope = {
+    stack += node.scope
+    val res = recurse(node)
+    stack.remove(stack.length - 1)
+    res ++ stack.lastOption.map(node -> _)
   }
 
-  private val stack: mutable.Stack[Scope] = mutable.Stack()
+  private val stack: mutable.ListBuffer[Scope] = ListBuffer()
 }

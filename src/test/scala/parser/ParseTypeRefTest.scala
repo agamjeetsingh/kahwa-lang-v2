@@ -1,6 +1,6 @@
 package parser
 
-import ast.{AstTransformer, AtomType, Expr, FunctionDecl, FunctionType, Ident, TupleType, TypeRef}
+import ast.{AstTransformer, AtomType, Expr, ExprIdent, FunctionDecl, FunctionType, Ident, TupleType, TypeRef}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import parser.Parsel.Input
@@ -37,7 +37,7 @@ class ParseTypeRefTest extends AnyFlatSpec with Matchers {
       }
 
       override def transform(expr: Expr): Expr = expr match {
-        case ident: Ident => ident.copy(range = SourceRange.dummy)
+        case ident: ExprIdent => ident.copy(range = SourceRange.dummy)
         case _ => expr
       }
     }

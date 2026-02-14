@@ -286,6 +286,8 @@ private object DeclareNames {
       modifier => modifier.isModality || modifier == OVERRIDE
     )
 
+    functionDecl.block.scope.addOuterScope(functionSymbol.scope)
+
     functionSymbol
   }
 
@@ -335,6 +337,8 @@ private object DeclareNames {
     methodSymbol.setModality(resolveModality(functionDecl.modifiers))
     methodSymbol.isAnOverride =
       hasModifier(functionDecl.modifiers, Modifier.OVERRIDE)
+
+    functionDecl.block.scope.addOuterScope(methodSymbol.scope)
 
     methodSymbol
   }

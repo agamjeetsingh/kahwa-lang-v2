@@ -188,7 +188,7 @@ object Parser {
       parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
       parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
       parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
-      parseIdentifier.map(tok => Ident(tok.value, List.empty, tok.range)),
+      parseIdentifier.map(tok => ExprIdent(tok.value, List.empty, tok.range)),
       parseContinue.map(tok => ContinueExpr(tok.range)),
       parseBreak.map(tok => BreakExpr(tok.range))
     )
@@ -316,7 +316,7 @@ object Parser {
       ),
       Ops(Postfix)(
         (parseDot ~> parseIdentifier).map(ident =>
-          (e: Expr) => MemberAccessExpr(e, Ident(ident.value, List.empty, ident.range), e.range <-> ident.range)
+          (e: Expr) => MemberAccessExpr(e, ExprIdent(ident.value, List.empty, ident.range), e.range <-> ident.range)
         )
       )
     )
@@ -367,7 +367,7 @@ object Parser {
 
   lazy val parseFunctionDecl: SafePointFunc ?=> Parsel[FunctionDecl, Token, Diagnostic] = {
     spanned(
-      list(parseModifierNode) ~ parseIdentifier ~ optional(parseGenericArguments) ~
+      list(parseModifierNode) ~ (parseDef ~> parseIdentifier) ~ optional(parseGenericArguments) ~
         (parseLeftParen ~> sepBy(
           parseParameter,
           parseComma
@@ -585,6 +585,7 @@ object Parser {
   private val parseTypedef = parseTok("typedef") { case tok: Token.Typedef => tok }
   private val parseOverride = parseTok("override") { case tok: Token.Override => tok }
   private val parseObjectTok = parseTok("object") { case tok: Token.ObjectTok => tok }
+  private val parseDef = parseTok("def") { case tok: Token.Def => tok }
 
   private val parseReturn = parseTok("return") { case tok: Token.Return => tok }
   private val parseIf = parseTok("if") { case tok: Token.If => tok }

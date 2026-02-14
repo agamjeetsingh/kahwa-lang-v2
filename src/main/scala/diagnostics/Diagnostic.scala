@@ -2,6 +2,7 @@ package diagnostics
 
 import ast.Modifier
 import sources.SourceRange
+import symbols.SemanticType
 
 enum Diagnostic(val msg: String, val range: SourceRange) {
   case UnrecognisedToken(token: String, override val range: SourceRange)
@@ -60,4 +61,10 @@ enum Diagnostic(val msg: String, val range: SourceRange) {
         s"$expected type parameters expected for $symbol but found $found",
         range
       )
+
+  case TypeError(
+                  found: SemanticType,
+                  required: SemanticType,
+                  override val range: SourceRange
+  ) extends Diagnostic(s"Found: ${found.prettyPrint}\nRequired: ${required.prettyPrint}", range)
 }
