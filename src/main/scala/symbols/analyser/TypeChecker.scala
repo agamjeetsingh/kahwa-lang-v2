@@ -7,12 +7,17 @@ import sources.SourceRange
 import symbols.{
   BoundBlockExpr,
   BoundBoolLiteral,
+  BoundBreak,
+  BoundContinue,
   BoundExpr,
   BoundFloatLiteral,
+  BoundIfExpr,
   BoundIntegerLiteral,
   BoundStringLiteral,
   BoundVariable,
   BoundVariableDecl,
+  BoundWhileExpr,
+  ObjectSymbol,
   SemanticType,
   VariableSymbol
 }
@@ -50,12 +55,14 @@ class TypeChecker(
           }
         }
       case exprIdent: ExprIdent => {
-        val termSymbols = nodeToScope(expr).searchForTerm(exprIdent).collect { case symbol: VariableSymbol => symbol }
-        if (termSymbols.isEmpty) {
-          ???
-        } else {
-          BoundVariable(termSymbols.head, varToType.getOrElse(termSymbols.head, KahwaLangScope.NothingType))
-        }
+        val optionalVariableSymbol = nodeToScope(expr).searchForNonOverloadableTerm(exprIdent)
+        val boundVariable = optionalVariableSymbol.collect {
+          // TODO - Consider the case when its an ObjectSymbol
+          case variableSymbol: VariableSymbol =>
+            BoundVariable(variableSymbol, varToType.getOrElse(variableSymbol, KahwaLangScope.NothingType))
+        }.getOrElse(BoundVariable.ErrorVariable)
+        checkWith(boundVariable.semanticType)
+        boundVariable
       }
       case BinaryExpr(expr1, expr2, op, range) => ???
       case UnaryExpr(expr, op, range) => ???
@@ -67,10 +74,28 @@ class TypeChecker(
         checkWith(inferredType)
         BoundBlockExpr(boundExprs, inferredType)
       }
-      case IfExpr(expr, ifBlock, elseBlock, range) => ???
-      case WhileExpr(cond, body, range) => ???
-      case BreakExpr(range) => ???
-      case ContinueExpr(range) => ???
+      case IfExpr(expr, ifBlock, elseBlock, range) => {
+        val ifBoundExpr = check(ifBlock).asInstanceOf[BoundBlockExpr]
+        val elseBoundExpr = elseBlock.map(check(_)).map(_.asInstanceOf[BoundBlockExpr])
+
+        checkAndReturn(
+          BoundIfExpr(
+            check(expr, TypeConstraint.subtypeOf(KahwaLangScope.BoolType)),
+            ifBoundExpr,
+            elseBoundExpr,
+            elseBoundExpr.map(_.semanticType typeUnion ifBoundExpr.semanticType).getOrElse(ifBoundExpr.semanticType)
+          )
+        )
+      }
+      case WhileExpr(cond, body, range) => checkAndReturn(
+          BoundWhileExpr(
+            check(cond, TypeConstraint.subtypeOf(KahwaLangScope.BoolType)),
+            check(body).asInstanceOf[BoundBlockExpr],
+            KahwaLangScope.UnitType
+          )
+        )
+      case BreakExpr(_) => checkAndReturn(BoundBreak())
+      case ContinueExpr(_) => checkAndReturn(BoundContinue())
       case LambdaExpr(paramList, body, range) => ???
       case TupleExpr(elements, range) => ???
       case VariableDecl(name, typeRef, readOnly, initExpr, range) => {
@@ -91,6 +116,13 @@ class TypeChecker(
   }
 
   private val varToType: mutable.Map[VariableSymbol, SemanticType] = mutable.Map.empty
+
+  private def checkAndReturn[T <: BoundExpr](
+      boundExpr: T
+  )(using typeConstraint: TypeConstraint, range: SourceRange): T = {
+    diagnostics ++= typeConstraint.isSatisfiedBy(boundExpr.semanticType)
+    boundExpr
+  }
 
   private def checkWith(semanticType: SemanticType)(using typeConstraint: TypeConstraint, range: SourceRange): Unit = {
     diagnostics ++= typeConstraint.isSatisfiedBy(semanticType)

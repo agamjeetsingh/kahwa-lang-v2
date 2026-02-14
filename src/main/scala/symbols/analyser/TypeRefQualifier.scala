@@ -1,8 +1,8 @@
 package symbols.analyser
 
-import ast.{AtomType, FunctionType, Ident, TraversingVisitor, TupleType, TypeRef}
+import ast.{AtomType, FunctionType, TraversingVisitor, TupleType, TypeRef}
 import symbols.{SemanticType, TypeSymbol}
-import symbols.analyser.SemanticAnalyser.{MutableIdentToSymbol, MutableNodeToSymbol, MutableTypeRefToSemanticType}
+import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType}
 
 import scala.collection.mutable
 
@@ -49,7 +49,6 @@ class TypeRefQualifier(
   private def typeRefToSymbol(node: AtomType): TypeSymbol = {
     nodeToScope(node.name)
       .searchForType(node.name)
-      .headOption
       .getOrElse(KahwaLangScope.ErrorTypeSymbol)
   }
 }

@@ -33,6 +33,10 @@ sealed class TypeSymbol(name: String, scope: Scope) extends Symbol(name, scope),
 
 sealed abstract class TermSymbol(name: String, scope: Scope) extends Symbol(name, scope)
 
+sealed abstract class OverloadableTermSymbol(name: String, scope: Scope) extends TermSymbol(name, scope)
+
+sealed abstract class NonOverloadableTermSymbol(name: String, scope: Scope) extends TermSymbol(name, scope)
+
 class TypeParameterSymbol(
     override val name: String,
     outerScope: Scope,
@@ -64,7 +68,7 @@ class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymb
   val linkedObject: Option[ObjectSymbol] = None
 }
 
-class ObjectSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope), Modal {
+class ObjectSymbol(override val name: String, outerScope: Scope) extends NonOverloadableTermSymbol(name, outerScope), Modal {
   var visibility: Visibility = Visibility.default
   val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
   val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
@@ -74,7 +78,7 @@ class ObjectSymbol(override val name: String, outerScope: Scope) extends TermSym
   val linkedClass: Option[ClassSymbol] = None
 }
 
-class VariableSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
+class VariableSymbol(override val name: String, outerScope: Scope) extends NonOverloadableTermSymbol(name, outerScope) {
   var semanticType: SemanticType = KahwaLangScope.ErrorType
   val initExpr: Option[BoundExpr] = None
 }
@@ -87,7 +91,7 @@ class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleV
   var isAnOverride: Boolean = false
 }
 
-class FunctionSymbol(override val name: String, outerScope: Scope) extends TermSymbol(name, outerScope) {
+class FunctionSymbol(override val name: String, outerScope: Scope) extends OverloadableTermSymbol(name, outerScope) {
   var visibility: Visibility = Visibility.default
 
   var block: BoundBlockExpr = BoundBlockExpr(List.empty, KahwaLangScope.NothingType)
@@ -138,6 +142,8 @@ object SemanticType {
           }
       }
     }
+
+    infix def typeUnion(t2: SemanticType): SemanticType = ???
   }
 }
 
@@ -165,6 +171,10 @@ case class BoundStringLiteral(value: String) extends BoundLiteralExpr {
 
 case class BoundVariable(variableSymbol: VariableSymbol, override val semanticType: SemanticType) extends BoundExpr
 
+object BoundVariable {
+  val ErrorVariable = BoundVariable(VariableSymbol("error-variable-symbol", KahwaLangScope), KahwaLangScope.ErrorType)
+}
+
 case class FunctionCall(
     functionSymbol: FunctionSymbol,
     genericArguments: List[SemanticType],
@@ -189,7 +199,7 @@ case class FieldAccess(fieldSymbol: FieldSymbol, target: BoundExpr, override val
 
 case class BoundBlockExpr(exprs: List[BoundExpr], override val semanticType: SemanticType) extends BoundExpr
 
-case class IfExpr(
+case class BoundIfExpr(
     expr: BoundExpr,
     ifBlock: BoundBlockExpr,
     elseBlock: Option[BoundBlockExpr] = None,
