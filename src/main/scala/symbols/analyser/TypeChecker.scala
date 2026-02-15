@@ -2,12 +2,11 @@ package symbols.analyser
 
 import ast.*
 import diagnostics.Diagnostic
-import diagnostics.Diagnostic.TypeError
+import diagnostics.Diagnostic.{SymbolAlreadyDeclared, TypeError}
 import sources.SourceRange
-import symbols.{BoundBlockExpr, BoundBoolLiteral, BoundBreak, BoundContinue, BoundExpr, BoundFloatLiteral, BoundIfExpr, BoundIntegerLiteral, BoundStringLiteral, BoundVariable, BoundVariableDecl, BoundWhileExpr, SemanticType, VariableSymbol}
-import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType, SemanticContext}
+import symbols.*
+import symbols.analyser.SemanticAnalyser.SemanticContext
 
-import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class TypeChecker(
@@ -28,7 +27,9 @@ class TypeChecker(
         val boundVariable = optionalVariableSymbol.collect {
           // TODO - Consider the case when its an ObjectSymbol
           case variableSymbol: VariableSymbol =>
-            BoundVariable(variableSymbol, varToType.getOrElse(variableSymbol, KahwaLangScope.NothingType))
+            // TODO - Assume variable symbol has inferred type, which is true for all local variables but not sure about global variables
+            //      - Maybe need to type check them first
+            BoundVariable(variableSymbol, variableSymbol.semanticType)
         }.getOrElse(BoundVariable.ErrorVariable)
         checkWith(boundVariable.semanticType)
         boundVariable
@@ -38,10 +39,11 @@ class TypeChecker(
       case CallExpr(callee, args, range) => ???
       case MemberAccessExpr(base, member, range) => ???
       case blockExpr: BlockExpr => {
+        stack += ListBuffer.empty
         val boundExprs = blockExpr.exprs.map(check(_))
         val inferredType = boundExprs.lastOption.map(_.semanticType).getOrElse(KahwaLangScope.UnitType)
         checkWith(inferredType)
-        BoundBlockExpr(boundExprs, inferredType)
+        BoundBlockExpr(boundExprs, inferredType, semanticContext.blockToOwnScope(blockExpr), popAndGetVars())
       }
       case IfExpr(expr, ifBlock, elseBlock, range) => {
         val ifBoundExpr = check(ifBlock).asInstanceOf[BoundBlockExpr]
@@ -70,23 +72,40 @@ class TypeChecker(
       case VariableDecl(name, typeRef, readOnly, initExpr, range) => {
         // TODO - Assume init expr exists
         val boundInitExpr = initExpr.map(
-          check(_, TypeConstraint.subtypeOf(typeRef.map(semanticContext.typeRefToSemanticType).getOrElse(KahwaLangScope.AnyType)))
+          check(
+            _,
+            TypeConstraint.subtypeOf(
+              typeRef.map(semanticContext.typeRefToSemanticType).getOrElse(KahwaLangScope.AnyType)
+            )
+          )
         )
         val inferredType = boundInitExpr.map(_.semanticType).getOrElse(KahwaLangScope.NothingType)
 
         checkWith(inferredType)
 
-        varToType += ??? // Don't know how to add it to map
+        val variableSymbol = VariableSymbol(name, semanticContext.nodeToScope(expr))
+        variableSymbol.initExpr = boundInitExpr
+        variableSymbol.semanticType = inferredType
+
+        if (semanticContext.nodeToScope(expr).searchForTerm(name).nonEmpty) {
+          semanticContext.diagnostics += SymbolAlreadyDeclared(name, range)
+        } else {
+          semanticContext.nodeToScope(expr).define(variableSymbol)
+        }
 
         // TODO - Do something about not being able to infer type
         BoundVariableDecl(name, inferredType, readOnly, boundInitExpr)
       }
     }
   }
-  
-  val stack: ListBuffer[BoundBlockExpr] = ListBuffer.empty
 
-  private val varToType: mutable.Map[VariableSymbol, SemanticType] = mutable.Map.empty
+  private val stack: ListBuffer[ListBuffer[VariableSymbol]] = ListBuffer.empty
+
+  private def popAndGetVars(): ListBuffer[VariableSymbol] = {
+    val res = stack.last
+    stack.remove(stack.size - 1)
+    res
+  }
 
   private def checkAndReturn[T <: BoundExpr](
       boundExpr: T

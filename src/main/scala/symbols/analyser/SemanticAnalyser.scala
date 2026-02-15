@@ -19,8 +19,8 @@ object SemanticAnalyser {
   private[analyser] type MutableBlockToOwnScope = mutable.Map[BlockExpr, Scope]
 
   private[analyser] class SemanticContext {
-    val nodeToSymbol: MutableNodeToSymbol = mutable.Map()
     val diagnostics: ListBuffer[Diagnostic] = ListBuffer()
+    val nodeToSymbol: MutableNodeToSymbol = mutable.Map()
     val nodeToScope: MutableNodeToScope = mutable.Map.empty
     val blockToOwnScope: MutableBlockToOwnScope = mutable.Map.empty
     val typeRefToSemanticType: MutableTypeRefToSemanticType = mutable.Map.empty
@@ -42,8 +42,7 @@ object SemanticAnalyser {
     AstScopeGenerator(semanticContext).visitKahwaFile(kahwaFile)
 
     // Phase 4: Build a map from TypeRefs to Semantic Types
-    val typeRefToSemanticType: MutableTypeRefToSemanticType =
-      TypeRefQualifier(semanticContext).visitKahwaFile(kahwaFile)
+    TypeRefQualifier(semanticContext).visitKahwaFile(kahwaFile)
 
     // Phase 5: Detect cycles in the typedefs
 //    diagnostics ++= TypedefCycleDetector.detectCycles(kahwaFile.typedefDecls)
@@ -54,7 +53,7 @@ object SemanticAnalyser {
     // Phase 7:
 
     val boundExprs = TypeCheck(semanticContext).visitKahwaFile(kahwaFile)
-    println(boundExprs)
+    println(boundExprs.mkString("\n"))
 
     (translationUnit, semanticContext.diagnostics.toList)
   }

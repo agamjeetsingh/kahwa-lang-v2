@@ -8,41 +8,25 @@ import scala.collection.mutable
 
 class TypeRefQualifier(
     val semanticContext: SemanticContext
-) extends TraversingVisitor[MutableTypeRefToSemanticType] {
-  override protected def defaultResult: MutableTypeRefToSemanticType =
-    mutable.Map.empty
+) extends TraversingVisitor[Unit] {
+  override protected def defaultResult: Unit = {}
 
-  override protected def combine(
-      r1: MutableTypeRefToSemanticType,
-      r2: MutableTypeRefToSemanticType
-  ): MutableTypeRefToSemanticType = r1 ++ r2
+  override def visitTypeRef(node: TypeRef): Unit = resolveSemanticType(node)
 
-  override def visitTypeRef(node: TypeRef): MutableTypeRefToSemanticType = {
-    resolveSemanticType(node)._2
-  }
-
-  extension (pair: (SemanticType, MutableTypeRefToSemanticType)) {
-    private def ~>(map: MutableTypeRefToSemanticType): SemanticType = {
-      map ++= pair._2
-      pair._1
-    }
-  }
-
-  private def resolveSemanticType(node: TypeRef): (SemanticType, MutableTypeRefToSemanticType) = {
-    val map: MutableTypeRefToSemanticType = mutable.Map.empty
+  private def resolveSemanticType(node: TypeRef): SemanticType = {
     val semanticType = node match {
       case atomicType: AtomType =>
-        SemanticType(typeRefToSymbol(atomicType), atomicType.args.map(t => resolveSemanticType(t) ~> map))
+        SemanticType(typeRefToSymbol(atomicType), atomicType.args.map(t => resolveSemanticType(t)))
       case TupleType(elems, _) =>
-        SemanticType(KahwaLangScope.tupleSymbols(elems.size), elems.map(t => resolveSemanticType(t) ~> map))
+        SemanticType(KahwaLangScope.tupleSymbols(elems.size), elems.map(t => resolveSemanticType(t)))
       case FunctionType(paramList, returnType, _) =>
         SemanticType(
           KahwaLangScope.functionSymbols(paramList.size),
-          paramList.map(t => resolveSemanticType(t) ~> map) ++ List(resolveSemanticType(returnType) ~> map)
+          paramList.map(t => resolveSemanticType(t)) ++ List(resolveSemanticType(returnType))
         )
     }
-    map += node -> semanticType
-    (semanticType, map)
+    semanticContext.typeRefToSemanticType += node -> semanticType
+    semanticType
   }
 
   private def typeRefToSymbol(node: AtomType): TypeSymbol = {
