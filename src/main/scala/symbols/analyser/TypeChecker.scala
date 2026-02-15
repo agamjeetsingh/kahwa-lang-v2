@@ -4,58 +4,27 @@ import ast.*
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.TypeError
 import sources.SourceRange
-import symbols.{
-  BoundBlockExpr,
-  BoundBoolLiteral,
-  BoundBreak,
-  BoundContinue,
-  BoundExpr,
-  BoundFloatLiteral,
-  BoundIfExpr,
-  BoundIntegerLiteral,
-  BoundStringLiteral,
-  BoundVariable,
-  BoundVariableDecl,
-  BoundWhileExpr,
-  ObjectSymbol,
-  SemanticType,
-  VariableSymbol
-}
-import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType}
+import symbols.{BoundBlockExpr, BoundBoolLiteral, BoundBreak, BoundContinue, BoundExpr, BoundFloatLiteral, BoundIfExpr, BoundIntegerLiteral, BoundStringLiteral, BoundVariable, BoundVariableDecl, BoundWhileExpr, SemanticType, VariableSymbol}
+import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType, SemanticContext}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class TypeChecker(
-    val nodeToSymbol: MutableNodeToSymbol,
-    val nodeToScope: NodeToScope,
-    val typeRefToSemanticType: MutableTypeRefToSemanticType,
-    val diagnostics: ListBuffer[Diagnostic]
+    val semanticContext: SemanticContext
 ) {
   def check(expr: Expr, typeConstraint: TypeConstraint = TypeConstraint.Nothing): BoundExpr = {
     given SourceRange = expr.range
     given TypeConstraint = typeConstraint
     expr match {
       case expr: LiteralExpr => expr match {
-          case BoolLiteral(value, _) => {
-            checkWith(KahwaLangScope.BoolType)
-            BoundBoolLiteral(value)
-          }
-          case FloatLiteral(value, range) => {
-            checkWith(KahwaLangScope.FloatType)
-            BoundFloatLiteral(value)
-          }
-          case IntegerLiteral(value, range) => {
-            checkWith(KahwaLangScope.IntType)
-            BoundIntegerLiteral(value)
-          }
-          case StringLiteral(value, range) => {
-            checkWith(KahwaLangScope.StringType)
-            BoundStringLiteral(value)
-          }
+          case BoolLiteral(value, _) => checkAndReturn(BoundBoolLiteral(value))
+          case FloatLiteral(value, range) => checkAndReturn(BoundFloatLiteral(value))
+          case IntegerLiteral(value, range) => checkAndReturn(BoundIntegerLiteral(value))
+          case StringLiteral(value, range) => checkAndReturn(BoundStringLiteral(value))
         }
       case exprIdent: ExprIdent => {
-        val optionalVariableSymbol = nodeToScope(expr).searchForNonOverloadableTerm(exprIdent)
+        val optionalVariableSymbol = semanticContext.nodeToScope(expr).searchForNonOverloadableTerm(exprIdent)
         val boundVariable = optionalVariableSymbol.collect {
           // TODO - Consider the case when its an ObjectSymbol
           case variableSymbol: VariableSymbol =>
@@ -68,8 +37,8 @@ class TypeChecker(
       case UnaryExpr(expr, op, range) => ???
       case CallExpr(callee, args, range) => ???
       case MemberAccessExpr(base, member, range) => ???
-      case BlockExpr(exprs, range) => {
-        val boundExprs = exprs.map(check(_))
+      case blockExpr: BlockExpr => {
+        val boundExprs = blockExpr.exprs.map(check(_))
         val inferredType = boundExprs.lastOption.map(_.semanticType).getOrElse(KahwaLangScope.UnitType)
         checkWith(inferredType)
         BoundBlockExpr(boundExprs, inferredType)
@@ -101,7 +70,7 @@ class TypeChecker(
       case VariableDecl(name, typeRef, readOnly, initExpr, range) => {
         // TODO - Assume init expr exists
         val boundInitExpr = initExpr.map(
-          check(_, TypeConstraint.subtypeOf(typeRef.map(typeRefToSemanticType).getOrElse(KahwaLangScope.AnyType)))
+          check(_, TypeConstraint.subtypeOf(typeRef.map(semanticContext.typeRefToSemanticType).getOrElse(KahwaLangScope.AnyType)))
         )
         val inferredType = boundInitExpr.map(_.semanticType).getOrElse(KahwaLangScope.NothingType)
 
@@ -114,18 +83,20 @@ class TypeChecker(
       }
     }
   }
+  
+  val stack: ListBuffer[BoundBlockExpr] = ListBuffer.empty
 
   private val varToType: mutable.Map[VariableSymbol, SemanticType] = mutable.Map.empty
 
   private def checkAndReturn[T <: BoundExpr](
       boundExpr: T
   )(using typeConstraint: TypeConstraint, range: SourceRange): T = {
-    diagnostics ++= typeConstraint.isSatisfiedBy(boundExpr.semanticType)
+    semanticContext.diagnostics ++= typeConstraint.isSatisfiedBy(boundExpr.semanticType)
     boundExpr
   }
 
   private def checkWith(semanticType: SemanticType)(using typeConstraint: TypeConstraint, range: SourceRange): Unit = {
-    diagnostics ++= typeConstraint.isSatisfiedBy(semanticType)
+    semanticContext.diagnostics ++= typeConstraint.isSatisfiedBy(semanticType)
   }
 
   case class TypeConstraint(subTypeOf: SemanticType, superTypeOf: SemanticType) {

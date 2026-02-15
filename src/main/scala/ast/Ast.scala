@@ -191,7 +191,6 @@ case class BlockExpr(exprs: List[Expr], range: SourceRange = SourceRange.dummy) 
       )
       .mkString("{\n", "\n", "\n}")
   }
-  val scope: Scope = Scope()
 }
 
 case class IfExpr(

@@ -1,6 +1,6 @@
 package symbols
 
-import ast.{BlockExpr, Modifier, PrettyPrintable, TypeRef, Variance}
+import ast.{Modifier, PrettyPrintable, Variance}
 import ast.Variance.INVARIANT
 import symbols.analyser.KahwaLangScope
 
@@ -13,17 +13,6 @@ sealed abstract class Symbol(val name: String, outerScopes: List[Scope]) {
     val s = Scope()
     outerScopes.foreach(s.addOuterScope)
     s
-  }
-
-  def isType: Boolean = this match {
-    case _: TypeSymbol => true
-    case _ => false
-  }
-
-  def isTerm: Boolean = this match {
-    case symbol: TypeSymbol => false
-    case _: VariableSymbol | _: FunctionSymbol => true
-    case _: symbols.TranslationUnit => ???
   }
 }
 
@@ -197,7 +186,7 @@ case class MethodCall(
 case class FieldAccess(fieldSymbol: FieldSymbol, target: BoundExpr, override val semanticType: SemanticType)
     extends BoundExpr
 
-case class BoundBlockExpr(exprs: List[BoundExpr], override val semanticType: SemanticType) extends BoundExpr
+case class BoundBlockExpr(exprs: List[BoundExpr], override val semanticType: SemanticType, vars: ListBuffer[VariableSymbol] = ListBuffer.empty) extends BoundExpr
 
 case class BoundIfExpr(
     expr: BoundExpr,

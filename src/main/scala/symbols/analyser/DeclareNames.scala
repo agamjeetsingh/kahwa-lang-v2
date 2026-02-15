@@ -1,47 +1,20 @@
 package symbols.analyser
 
 import ast.Modifier.{OVERRIDE, PRIVATE, PROTECTED, PUBLIC}
-import ast.{
-  ClassDecl,
-  Decl,
-  FieldDecl,
-  FunctionDecl,
-  KahwaFile,
-  Modifier,
-  ModifierNode,
-  ObjectDecl,
-  TypeParameterDecl,
-  TypedefDecl,
-  VariableDecl
-}
+import ast.{ClassDecl, Decl, FieldDecl, FunctionDecl, KahwaFile, Modifier, ModifierNode, ObjectDecl, TypeParameterDecl, TypedefDecl, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared}
 import sources.SourceRange
-import symbols.{
-  ClassSymbol,
-  FieldSymbol,
-  FunctionSymbol,
-  MethodSymbol,
-  ObjectSymbol,
-  Scope,
-  Symbol,
-  TranslationUnit,
-  TypeParameterSymbol,
-  TypedefSymbol,
-  VariableSymbol,
-  Visibility,
-  VisibleVariableSymbol
-}
-import symbols.analyser.SemanticAnalyser.MutableNodeToSymbol
+import symbols.{ClassSymbol, FieldSymbol, FunctionSymbol, MethodSymbol, ObjectSymbol, Scope, Symbol, TranslationUnit, TypeParameterSymbol, TypedefSymbol, VariableSymbol, Visibility, VisibleVariableSymbol}
+import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, SemanticContext}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-private object DeclareNames {
-  def declareFile(kahwaFile: KahwaFile)(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
-  ): TranslationUnit = {
+private class DeclareNames(
+    val semanticContext: SemanticContext
+) {
+  def declareFile(kahwaFile: KahwaFile): TranslationUnit = {
     val translationUnit =
       TranslationUnit(kahwaFile.range.fileId.toString, List.empty)
 
@@ -80,8 +53,8 @@ private object DeclareNames {
       typedefDecl => declareTypedef(typedefDecl, translationUnit.scope),
       translationUnit.typedefs += _
     )
-    
-    nodeToSymbol += kahwaFile -> translationUnit
+
+    semanticContext.nodeToSymbol += kahwaFile -> translationUnit
 
     translationUnit
   }
@@ -93,7 +66,7 @@ private object DeclareNames {
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean,
       term: Boolean
-  )(using nodeToSymbol: MutableNodeToSymbol): List[Diagnostic] = {
+  ): List[Diagnostic] = {
     val ts = decls.map(decl => (declToSymbol(decl), decl.range, decl))
 
     ts.flatMap(tuple => {
@@ -104,7 +77,7 @@ private object DeclareNames {
         || (!term && parentSymbol.scope
           .searchForType(childSymbol.name)
           .nonEmpty))
-      nodeToSymbol += decl -> childSymbol
+      semanticContext.nodeToSymbol += decl -> childSymbol
       if (badDuplicate) {
         List(SymbolAlreadyDeclared(childSymbol.name, range))
       } else {
@@ -121,11 +94,8 @@ private object DeclareNames {
       declToSymbolAndRange: T => U,
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean = false
-  )(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
   ): Unit = {
-    diagnostics ++= register(
+    semanticContext.diagnostics ++= register(
       parentSymbol,
       decls,
       declToSymbolAndRange,
@@ -141,11 +111,8 @@ private object DeclareNames {
       declToSymbolAndRange: T => U,
       registerSymbol: U => Unit,
       duplicatesAllowed: Boolean = false
-  )(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
   ): Unit = {
-    diagnostics ++= register(
+    semanticContext.diagnostics ++= register(
       parentSymbol,
       decls,
       declToSymbolAndRange,
@@ -159,9 +126,6 @@ private object DeclareNames {
       classDecl: ClassDecl,
       outerScope: Scope,
       topLevel: Boolean
-  )(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
   ): ClassSymbol = {
     val classSymbol = ClassSymbol(classDecl.name, outerScope)
 
@@ -214,10 +178,7 @@ private object DeclareNames {
     classSymbol
   }
 
-  private def declareObject(objectDecl: ObjectDecl, outerScope: Scope, topLevel: Boolean)(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
-  ): ObjectSymbol = {
+  private def declareObject(objectDecl: ObjectDecl, outerScope: Scope, topLevel: Boolean): ObjectSymbol = {
     val objectSymbol = ObjectSymbol(objectDecl.name, outerScope)
 
     registerType(
@@ -258,10 +219,7 @@ private object DeclareNames {
     objectSymbol
   }
 
-  private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope)(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
-  ): FunctionSymbol = {
+  private def declareFunction(functionDecl: FunctionDecl, outerScope: Scope): FunctionSymbol = {
     val functionSymbol = FunctionSymbol(functionDecl.name, outerScope)
 
     registerType(
@@ -285,16 +243,11 @@ private object DeclareNames {
       functionDecl.modifiers,
       modifier => modifier.isModality || modifier == OVERRIDE
     )
-
-    functionDecl.block.scope.addOuterScope(functionSymbol.scope)
-
+    
     functionSymbol
   }
 
-  private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope)(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
-  ): TypedefSymbol = {
+  private def declareTypedef(typedefDecl: TypedefDecl, outerScope: Scope): TypedefSymbol = {
     val typedefSymbol = TypedefSymbol(typedefDecl.name, outerScope)
 
     registerType(
@@ -311,10 +264,7 @@ private object DeclareNames {
     typedefSymbol
   }
 
-  private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope)(using
-      nodeToSymbol: MutableNodeToSymbol,
-      diagnostics: ListBuffer[Diagnostic]
-  ): MethodSymbol = {
+  private def declareMethod(functionDecl: FunctionDecl, outerScope: Scope): MethodSymbol = {
     val methodSymbol = MethodSymbol(functionDecl.name, outerScope)
 
     registerType(
@@ -337,24 +287,20 @@ private object DeclareNames {
     methodSymbol.setModality(resolveModality(functionDecl.modifiers))
     methodSymbol.isAnOverride =
       hasModifier(functionDecl.modifiers, Modifier.OVERRIDE)
-
-    functionDecl.block.scope.addOuterScope(methodSymbol.scope)
-
+    
     methodSymbol
   }
 
-  private def declareVariable(variableDecl: VariableDecl, outerScope: Scope)(using
-      diagnostics: ListBuffer[Diagnostic]
-  ): VariableSymbol = {
+  private def declareVariable(variableDecl: VariableDecl, outerScope: Scope): VariableSymbol = {
     val variableSymbol = VariableSymbol(variableDecl.name, outerScope)
-    
+
     variableSymbol
   }
 
   private def declareVisibleVariable(
       fieldDecl: FieldDecl,
       outerScope: Scope
-  )(using diagnostics: ListBuffer[Diagnostic]): VisibleVariableSymbol = {
+  ): VisibleVariableSymbol = {
     val visibleVariableSymbol =
       VisibleVariableSymbol(fieldDecl.name, outerScope)
 
@@ -369,9 +315,7 @@ private object DeclareNames {
     visibleVariableSymbol
   }
 
-  private def declareField(fieldDecl: FieldDecl, outerScope: Scope)(using
-      diagnostics: ListBuffer[Diagnostic]
-  ): FieldSymbol = {
+  private def declareField(fieldDecl: FieldDecl, outerScope: Scope): FieldSymbol = {
     val fieldSymbol = FieldSymbol(fieldDecl.name, outerScope)
 
     fieldSymbol.visibility = resolveVisibility(fieldDecl.modifiers, true)
@@ -386,7 +330,7 @@ private object DeclareNames {
   private def resolveVisibility(
       allModifiers: List[ModifierNode],
       topLevel: Boolean
-  )(using diagnostics: ListBuffer[Diagnostic]): Visibility = {
+  ): Visibility = {
     val modifiers = allModifiers.filter(_.modifier.isVisibility)
 
     val res = if (modifiers.isEmpty) {
@@ -405,9 +349,9 @@ private object DeclareNames {
     var protectedFound = false
     var privateFound = false
 
-    diagnostics ++= repeatedModifiers(modifiers)
+    semanticContext.diagnostics ++= repeatedModifiers(modifiers)
 
-    diagnostics ++= illegalCombinations(
+    semanticContext.diagnostics ++= illegalCombinations(
       modifiers,
       Map(
         Modifier.PUBLIC -> Set(Modifier.PRIVATE, Modifier.PROTECTED),
@@ -422,8 +366,8 @@ private object DeclareNames {
   private def modifierNotAllowed(
       modifiers: List[ModifierNode],
       notAllowed: Modifier => Boolean
-  )(using diagnostics: ListBuffer[Diagnostic]): Unit = {
-    diagnostics ++= modifiers.collect(modifierNode =>
+  ): Unit = {
+    semanticContext.diagnostics ++= modifiers.collect(modifierNode =>
       modifierNode.modifier match {
         case modifier if notAllowed(modifier) =>
           ModifierNotAllowed(modifier, modifierNode.range)
@@ -433,7 +377,7 @@ private object DeclareNames {
 
   private def resolveModality(
       allModifiers: List[ModifierNode]
-  )(using diagnostics: ListBuffer[Diagnostic]): Modifier = {
+  ): Modifier = {
     val modifiers = allModifiers.filter(_.modifier.isModality)
 
     val res = if (modifiers.nonEmpty) {
@@ -448,7 +392,7 @@ private object DeclareNames {
       Modifier.FINAL
     }
 
-    diagnostics ++= illegalCombinations(
+    semanticContext.diagnostics ++= illegalCombinations(
       modifiers,
       Map(
         Modifier.OPEN -> Set(Modifier.FINAL),
@@ -457,7 +401,7 @@ private object DeclareNames {
       )
     )
 
-    diagnostics ++= repeatedModifiers(modifiers)
+    semanticContext.diagnostics ++= repeatedModifiers(modifiers)
 
     res
   }
@@ -465,13 +409,13 @@ private object DeclareNames {
   private def hasModifier(
       modifiers: List[ModifierNode],
       desiredModifier: Modifier
-  )(using diagnostics: ListBuffer[Diagnostic]): Boolean = {
+  ): Boolean = {
     var found = false
     modifiers.foreach(modifierNode => {
       if (modifierNode.modifier == desiredModifier) {
         if (!found) found = true
         else {
-          diagnostics += RepeatedModifier(desiredModifier, modifierNode.range)
+          semanticContext.diagnostics += RepeatedModifier(desiredModifier, modifierNode.range)
         }
       }
     })
