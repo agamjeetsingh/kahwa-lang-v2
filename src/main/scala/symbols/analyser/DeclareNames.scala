@@ -56,6 +56,8 @@ private class DeclareNames(
 
     semanticContext.nodeToSymbol += kahwaFile -> translationUnit
 
+    translationUnit.scope.addOuterScope(KahwaLangScope)
+
     translationUnit
   }
 
@@ -72,7 +74,7 @@ private class DeclareNames(
     ts.flatMap(tuple => {
       val (childSymbol, range, decl) = tuple
       val badDuplicate = !duplicatesAllowed && ((term && parentSymbol.scope
-        .searchForTerm(childSymbol.name)
+        .searchForTerm(childSymbol.name, true)
         .nonEmpty)
         || (!term && parentSymbol.scope
           .searchForType(childSymbol.name)

@@ -63,8 +63,8 @@ enum Diagnostic(val msg: String, val range: SourceRange) {
       )
 
   case TypeError(
-                  found: SemanticType,
-                  required: SemanticType,
-                  override val range: SourceRange
-  ) extends Diagnostic(s"Found: ${found.prettyPrint}\nRequired: ${required.prettyPrint}", range)
+      found: SemanticType,
+      required: SemanticType,
+      override val range: SourceRange
+  ) extends Diagnostic(s"Found: ${found.prettyPrint}\tRequired: ${required.prettyPrint}", range)
 }

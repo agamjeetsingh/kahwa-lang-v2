@@ -1,7 +1,7 @@
 package symbols.analyser
 
-import ast.{AtomType, FunctionType, TraversingVisitor, TupleType, TypeRef}
-import symbols.{SemanticType, TypeSymbol}
+import ast.{AtomType, FunctionDecl, FunctionType, TraversingVisitor, TupleType, TypeRef}
+import symbols.{FunctionSymbol, SemanticType, TypeSymbol}
 import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType, SemanticContext}
 
 import scala.collection.mutable
@@ -10,6 +10,12 @@ class TypeRefQualifier(
     val semanticContext: SemanticContext
 ) extends TraversingVisitor[Unit] {
   override protected def defaultResult: Unit = {}
+
+  override def visitFunctionDecl(node: FunctionDecl): Unit = {
+    super.visitFunctionDecl(node)
+    semanticContext.nodeToSymbol(node).asInstanceOf[FunctionSymbol].returnType =
+      semanticContext.typeRefToSemanticType(node.returnType)
+  }
 
   override def visitTypeRef(node: TypeRef): Unit = resolveSemanticType(node)
 
@@ -30,7 +36,8 @@ class TypeRefQualifier(
   }
 
   private def typeRefToSymbol(node: AtomType): TypeSymbol = {
-    semanticContext.nodeToScope(node.name)
+    semanticContext
+      .nodeToScope(node.name)
       .searchForType(node.name)
       .getOrElse(KahwaLangScope.ErrorTypeSymbol)
   }

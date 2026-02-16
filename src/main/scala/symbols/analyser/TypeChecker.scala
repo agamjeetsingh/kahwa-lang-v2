@@ -16,12 +16,14 @@ class TypeChecker(
     given SourceRange = expr.range
     given TypeConstraint = typeConstraint
     expr match {
+      // Literal expressions directly convert to bound literals
       case expr: LiteralExpr => expr match {
           case BoolLiteral(value, _) => checkAndReturn(BoundBoolLiteral(value))
           case FloatLiteral(value, range) => checkAndReturn(BoundFloatLiteral(value))
           case IntegerLiteral(value, range) => checkAndReturn(BoundIntegerLiteral(value))
           case StringLiteral(value, range) => checkAndReturn(BoundStringLiteral(value))
         }
+      // Identifiers are either variables (with possible chained field access) or objects or TODO - ???
       case exprIdent: ExprIdent => {
         val optionalVariableSymbol = semanticContext.nodeToScope(expr).searchForNonOverloadableTerm(exprIdent)
         val boundVariable = optionalVariableSymbol.collect {
@@ -35,8 +37,29 @@ class TypeChecker(
         boundVariable
       }
       case BinaryExpr(expr1, expr2, op, range) => ???
-      case UnaryExpr(expr, op, range) => ???
-      case CallExpr(callee, args, range) => ???
+      case UnaryExpr(expr, op, range) => op match {
+        case UnaryOp.NOT => ???
+        case UnaryOp.PLUS => ???
+        case UnaryOp.MINUS => ???
+        case UnaryOp.POST_INCREMENT => ???
+        case UnaryOp.POST_DECREMENT => ???
+        case UnaryOp.PRE_INCREMENT => ???
+        case UnaryOp.PRE_DECREMENT => ???
+      }
+      case CallExpr(callee, args, range) => callee match {
+        case exprIdent: ExprIdent => {
+          val boundArgs = args.map(check(_))
+          val optionalFunctions = semanticContext.nodeToScope(expr).searchForOverloadableTerm(exprIdent)
+          // TODO - Ignore for now the possibility of a term with apply methods
+          val validCandidates = optionalFunctions.map(_.collect {
+            case functionSymbol: FunctionSymbol if funcValid(functionSymbol, boundArgs.map(_.semanticType)) => functionSymbol
+          }).toList.flatten // TODO - Ignore out of scope function for now
+          // TODO - This won't be true for implicit method calls like this.foo()
+          // TODO - Not sure if return type is resolved properly
+          FunctionCall(validCandidates.head, List.empty, boundArgs, validCandidates.head.returnType)
+        }
+        case _ => ???
+      }
       case MemberAccessExpr(base, member, range) => ???
       case blockExpr: BlockExpr => {
         stack += ListBuffer.empty
@@ -87,7 +110,9 @@ class TypeChecker(
         variableSymbol.initExpr = boundInitExpr
         variableSymbol.semanticType = inferredType
 
-        if (semanticContext.nodeToScope(expr).searchForTerm(name).nonEmpty) {
+        stack.lastOption.map(_ += variableSymbol)
+
+        if (semanticContext.nodeToScope(expr).searchForTerm(name, current = true).nonEmpty) {
           semanticContext.diagnostics += SymbolAlreadyDeclared(name, range)
         } else {
           semanticContext.nodeToScope(expr).define(variableSymbol)
@@ -123,8 +148,8 @@ class TypeChecker(
       if (semanticType < subTypeOf && superTypeOf < semanticType) {
         None
       } else {
-        ??? // TODO - Should have both superTypeOf and subtypeOf
-        Some(TypeError(semanticType, superTypeOf, range))
+//        ??? // TODO - Should have both superTypeOf and subtypeOf
+        Some(TypeError(semanticType, subTypeOf, range))
       }
     }
   }
@@ -137,5 +162,11 @@ class TypeChecker(
       TypeConstraint(KahwaLangScope.AnyType, semanticType)
 
     val Nothing = TypeConstraint(KahwaLangScope.AnyType, KahwaLangScope.NothingType)
+  }
+  
+  private def funcValid(functionSymbol: FunctionSymbol, args: List[SemanticType]): Boolean = {
+    val expectedArgs = functionSymbol.parameters.map(_.semanticType)
+    if (expectedArgs.size != args.size) return false
+    args.zip(expectedArgs).forall { case (a, b) => a < b }
   }
 }

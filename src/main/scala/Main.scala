@@ -3,7 +3,10 @@ import symbols.analyser.SemanticAnalyser
 
 @main
 def main(): Unit = {
-  val (input, ds) = Tokeniser.tokenise("def foo(): Int { val x = 1; val y = true; val z = {2; val z = x; {z;}}; val w = y;}", 0)
+  val (input, ds) = Tokeniser.tokenise(
+    "def foo(): Int { val b = foo(); val x = 1; val y = true; val z = false; val a: Bool = {2; val t = z; val z = x; {z;}}; val w = y;}",
+    0
+  )
   println(s"Tokenisation diagnostics: ${ds.map(_.msg)}")
   given SafePointFunction[Token] = tok => false
   val prog = Parser.parseKahwaFile(input)

@@ -55,15 +55,15 @@ class Scope {
 
   // ===== Search for terms =====
 
-  def searchForTerm(exprIdent: ExprIdent): TermSearchResult = {
-    searchForTerm(Ident(exprIdent.head, exprIdent.tail, exprIdent.range))
+  def searchForTerm(exprIdent: ExprIdent, current: Boolean): TermSearchResult = {
+    searchForTerm(Ident(exprIdent.head, exprIdent.tail, exprIdent.range), current)
   }
 
-  def searchForTerm(name: String): TermSearchResult = {
-    searchForTerm(Ident(name, List.empty, SourceRange.dummy))
+  def searchForTerm(name: String, current: Boolean): TermSearchResult = {
+    searchForTerm(Ident(name, List.empty, SourceRange.dummy), current)
   }
 
-  def searchForTerm(ident: Ident): TermSearchResult = {
+  def searchForTerm(ident: Ident, current: Boolean = false): TermSearchResult = {
     // a.b.c
     def rec(head: String, tail: List[String]): TermSearchResult = {
       // head = a; tail = List(b, c)
@@ -75,17 +75,18 @@ class Scope {
                 Ident(nextHead, nextTail, ident.range)
               ) match {
                 case None =>
-                  searchInParent() // (b.c) didn't get resolved correctly
+                  if (!current) searchInParent() else None // (b.c) didn't get resolved correctly
                 case res => res // Full a.b.c got resolved
               }
-            case _ => searchInParent() // a doesn't exist in current scope or is not a class
+            case _ => if (!current) searchInParent() // a doesn't exist in current scope or is not a class
+              else None
           }
         case Nil =>
           termSymbolTable.get(head) match {
             case Some(symbol: NonOverloadableTermSymbol) => Some(symbol)
             case Some(symbols: ListBuffer[OverloadableTermSymbol]) =>
               NonEmptyList.fromList(symbols.toList)
-            case None => searchInParent()
+            case None => if (!current) searchInParent() else None
           }
       }
     }
@@ -103,38 +104,38 @@ class Scope {
   }
 
   def searchForOverloadableTerm(name: String): Option[NonEmptyList[OverloadableTermSymbol]] = {
-    searchForTerm(name).collect {
-      case res: NonEmptyList[OverloadableTermSymbol] @unchecked => res
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
     }
   }
-  
+
   def searchForOverloadableTerm(name: Ident): Option[NonEmptyList[OverloadableTermSymbol]] = {
-    searchForTerm(name).collect {
-      case res: NonEmptyList[OverloadableTermSymbol] @unchecked => res
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
     }
   }
 
   def searchForOverloadableTerm(name: ExprIdent): Option[NonEmptyList[OverloadableTermSymbol]] = {
-    searchForTerm(name).collect {
-      case res: NonEmptyList[OverloadableTermSymbol] @unchecked => res
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
     }
   }
 
   def searchForNonOverloadableTerm(name: String): Option[NonOverloadableTermSymbol] = {
-    searchForTerm(name).collect {
-      case res: NonOverloadableTermSymbol => res
+    searchForTerm(name, false).collect { case res: NonOverloadableTermSymbol =>
+      res
     }
   }
 
   def searchForNonOverloadableTerm(name: Ident): Option[NonOverloadableTermSymbol] = {
-    searchForTerm(name).collect {
-      case res: NonOverloadableTermSymbol => res
+    searchForTerm(name).collect { case res: NonOverloadableTermSymbol =>
+      res
     }
   }
 
   def searchForNonOverloadableTerm(name: ExprIdent): Option[NonOverloadableTermSymbol] = {
-    searchForTerm(name).collect {
-      case res: NonOverloadableTermSymbol => res
+    searchForTerm(name, false).collect { case res: NonOverloadableTermSymbol =>
+      res
     }
   }
 

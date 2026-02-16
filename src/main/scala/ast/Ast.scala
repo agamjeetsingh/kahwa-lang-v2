@@ -421,7 +421,7 @@ case class ClassDecl(
     typeParameters: List[TypeParameterDecl] = List.empty,
     override val range: SourceRange = SourceRange.dummy
 ) extends ClassLikeDecl(name, modifiers, superClasses, fields, methods, nestedClasses, nestedObjects, range) {
-  override def prettyPrint: String =
+  override def prettyPrint: String = {
     s"${modifiers.prettyPrint}class $name${typeParameters.prettyPrint}${
         if superClasses.isEmpty then ""
         else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
@@ -432,6 +432,9 @@ case class ClassDecl(
       }${nestedClasses.map(_.prettyPrint).mkString("\n")}${
         if nestedClasses.isEmpty then "" else "\n"
       }${nestedObjects.map(_.prettyPrint).mkString("\n")}${if nestedObjects.isEmpty then "" else "\n"}}"
+  }
+
+  def getApplyMethods: List[FunctionDecl] = methods.filter(_.name == "apply")
 }
 
 case class ObjectDecl(

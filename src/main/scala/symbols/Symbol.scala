@@ -114,7 +114,7 @@ case class SemanticType(
     genericArguments: List[SemanticType] = List.empty
 ) extends PrettyPrintable {
   override def prettyPrint: String =
-    s"${typeSymbol.prettyPrint}${genericArguments.map(_.prettyPrint).mkString("[", ", ", "]")}"
+    s"${typeSymbol.prettyPrint}${if (genericArguments.isEmpty) "" else genericArguments.map(_.prettyPrint).mkString("[", ", ", "]")}"
 }
 
 object SemanticType {
@@ -125,9 +125,9 @@ object SemanticType {
       (t1, t2) match {
         case (SemanticType(typeSymbol1, genericArguments1), SemanticType(typeSymbol2, genericArguments2)) =>
           if (typeSymbol1 == typeSymbol2) {
-            ???
+            true // TODO
           } else {
-            ???
+            false
           }
       }
     }
@@ -167,7 +167,7 @@ object BoundVariable {
 case class FunctionCall(
     functionSymbol: FunctionSymbol,
     genericArguments: List[SemanticType],
-    args: BoundExpr,
+    args: List[BoundExpr],
     override val semanticType: SemanticType
 ) extends BoundExpr {
   require(genericArguments.size == functionSymbol.genericArguments.size)
