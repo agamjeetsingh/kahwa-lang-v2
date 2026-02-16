@@ -52,7 +52,7 @@ class AstScopeGenerator(
   ): Unit = {
 
     recurse(node)
-    semanticContext.nodeToScope += node -> stack.last
+    semanticContext.nodeToEnclosingScope += node -> stack.last
   }
 
   private def withScopeFrom[T <: Decl](
@@ -62,7 +62,7 @@ class AstScopeGenerator(
     stack += semanticContext.nodeToSymbol.get(node).map(_.scope).getOrElse(Scope())
     recurse(node)
     stack.remove(stack.length - 1)
-    semanticContext.nodeToScope ++= stack.lastOption.map(node -> _)
+    semanticContext.nodeToEnclosingScope ++= stack.lastOption.map(node -> _)
   }
 
   private def withScopeFromBlock(node: BlockExpr, recurse: BlockExpr => Unit): Unit = {
@@ -72,7 +72,7 @@ class AstScopeGenerator(
     stack += newScope
     recurse(node)
     stack.remove(stack.length - 1)
-    semanticContext.nodeToScope ++= stack.lastOption.map(node -> _)
+    semanticContext.nodeToEnclosingScope ++= stack.lastOption.map(node -> _)
   }
 
   private val stack: mutable.ListBuffer[Scope] = ListBuffer()

@@ -25,7 +25,7 @@ class TypeChecker(
         }
       // Identifiers are either variables (with possible chained field access) or objects or TODO - ???
       case exprIdent: ExprIdent => {
-        val optionalVariableSymbol = semanticContext.nodeToScope(expr).searchForNonOverloadableTerm(exprIdent)
+        val optionalVariableSymbol = semanticContext.nodeToEnclosingScope(expr).searchForNonOverloadableTerm(exprIdent)
         val boundVariable = optionalVariableSymbol.collect {
           // TODO - Consider the case when its an ObjectSymbol
           case variableSymbol: VariableSymbol =>
@@ -49,7 +49,7 @@ class TypeChecker(
       case CallExpr(callee, args, range) => callee match {
         case exprIdent: ExprIdent => {
           val boundArgs = args.map(check(_))
-          val optionalFunctions = semanticContext.nodeToScope(expr).searchForOverloadableTerm(exprIdent)
+          val optionalFunctions = semanticContext.nodeToEnclosingScope(expr).searchForOverloadableTerm(exprIdent)
           // TODO - Ignore for now the possibility of a term with apply methods
           val validCandidates = optionalFunctions.map(_.collect {
             case functionSymbol: FunctionSymbol if funcValid(functionSymbol, boundArgs.map(_.semanticType)) => functionSymbol
@@ -106,16 +106,16 @@ class TypeChecker(
 
         checkWith(inferredType)
 
-        val variableSymbol = VariableSymbol(name, semanticContext.nodeToScope(expr))
+        val variableSymbol = VariableSymbol(name, semanticContext.nodeToEnclosingScope(expr))
         variableSymbol.initExpr = boundInitExpr
         variableSymbol.semanticType = inferredType
 
         stack.lastOption.map(_ += variableSymbol)
 
-        if (semanticContext.nodeToScope(expr).searchForTerm(name, current = true).nonEmpty) {
+        if (semanticContext.nodeToEnclosingScope(expr).searchForTerm(name, current = true).nonEmpty) {
           semanticContext.diagnostics += SymbolAlreadyDeclared(name, range)
         } else {
-          semanticContext.nodeToScope(expr).define(variableSymbol)
+          semanticContext.nodeToEnclosingScope(expr).define(variableSymbol)
         }
 
         // TODO - Do something about not being able to infer type

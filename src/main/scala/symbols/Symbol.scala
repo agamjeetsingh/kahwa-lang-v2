@@ -3,6 +3,9 @@ package symbols
 import ast.{Modifier, PrettyPrintable, Variance}
 import ast.Variance.INVARIANT
 import symbols.analyser.KahwaLangScope
+import symbols.analyser.TypeRefQualifier
+import symbols.analyser.DeclareNames
+import symbols.analyser.TypeChecker
 
 import scala.collection.mutable.ListBuffer
 
@@ -26,12 +29,18 @@ sealed abstract class OverloadableTermSymbol(name: String, scope: Scope) extends
 
 sealed abstract class NonOverloadableTermSymbol(name: String, scope: Scope) extends TermSymbol(name, scope)
 
+/**
+ * Initialised completely by [[DeclareNames]]
+ */
 class TypeParameterSymbol(
     override val name: String,
     outerScope: Scope,
-    variance: Variance = INVARIANT
+    variance: Variance
 ) extends TypeSymbol(name, outerScope)
 
+/**
+ * Initialised completely by [[DeclareNames]]
+ */
 sealed trait Modal {
   var isAbstract: Boolean = false
   var isOpen: Boolean = false
@@ -47,65 +56,176 @@ sealed trait Modal {
 }
 
 class ClassSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope), Modal {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var visibility: Visibility = Visibility.default
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[TypeRefQualifier]]
+   */
   val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val fields: ListBuffer[FieldSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val nestedObjects: ListBuffer[ObjectSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   * @todo TODO - Hasn't been done yet
+   */
   val linkedObject: Option[ObjectSymbol] = None
 }
 
-class ObjectSymbol(override val name: String, outerScope: Scope) extends NonOverloadableTermSymbol(name, outerScope), Modal {
+class ObjectSymbol(override val name: String, outerScope: Scope)
+    extends NonOverloadableTermSymbol(name, outerScope),
+      Modal {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var visibility: Visibility = Visibility.default
+  /**
+   * Initialised completely by [[TypeRefQualifier]]
+   */
   val superClasses: ListBuffer[SemanticType] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val methods: ListBuffer[MethodSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val fields: ListBuffer[FieldSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val nestedClasses: ListBuffer[ClassSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val nestedObjects: ListBuffer[ObjectSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   * @todo TODO - Hasn't been done yet
+   */
   val linkedClass: Option[ClassSymbol] = None
 }
 
 class VariableSymbol(override val name: String, outerScope: Scope) extends NonOverloadableTermSymbol(name, outerScope) {
+  /**
+   * Initialised properly by [[TypeRefQualifier]]
+   */
   var semanticType: SemanticType = KahwaLangScope.ErrorType
+  /**
+   * Initialised properly by [[TypeChecker]]
+   */
   var initExpr: Option[BoundExpr] = None
 }
 
 class VisibleVariableSymbol(override val name: String, outerScope: Scope) extends VariableSymbol(name, outerScope) {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var visibility: Visibility = Visibility.default
 }
 
 class FieldSymbol(override val name: String, outerScope: Scope) extends VisibleVariableSymbol(name, outerScope), Modal {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var isAnOverride: Boolean = false
 }
 
 class FunctionSymbol(override val name: String, outerScope: Scope) extends OverloadableTermSymbol(name, outerScope) {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var visibility: Visibility = Visibility.default
-
+  /**
+   * Initialised properly by [[TypeChecker]]
+   */
   var block: BoundBlockExpr = BoundBlockExpr(List.empty, KahwaLangScope.NothingType, Scope())
-
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val parameters: ListBuffer[VariableSymbol] = ListBuffer.empty
-
+  /**
+   * Initialised properly by [[TypeChecker]]
+   */
   var returnType: SemanticType = KahwaLangScope.ErrorType
 }
 
 class MethodSymbol(override val name: String, outerScope: Scope) extends FunctionSymbol(name, outerScope), Modal {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var isAnOverride: Boolean = false
 }
 
-class TranslationUnit(override val name: String, outerScopes: List[Scope]) extends Symbol(name, outerScopes) {
+/**
+ * @todo outerScopes currently set by [[DeclareNames]] as an empty list because imports have not been implemented
+ */
+class TranslationUnit(
+    override val name: String,
+    outerScopes: List[Scope]
+) extends Symbol(name, outerScopes) {
+
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val classes: ListBuffer[ClassSymbol] = ListBuffer.empty
+
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val objects: ListBuffer[ObjectSymbol] = ListBuffer.empty
+
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val functions: ListBuffer[FunctionSymbol] = ListBuffer.empty
+
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val variables: ListBuffer[VisibleVariableSymbol] = ListBuffer.empty
+
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val typedefs: ListBuffer[TypedefSymbol] = ListBuffer.empty
 }
 
 class TypedefSymbol(override val name: String, outerScope: Scope) extends TypeSymbol(name, outerScope) {
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   val genericArguments: ListBuffer[TypeParameterSymbol] = ListBuffer.empty
+  /**
+   * Initialised properly by [[TypeRefQualifier]]
+   */
   var referredType: SemanticType = KahwaLangScope.ErrorType
+  /**
+   * Initialised completely by [[DeclareNames]]
+   */
   var visibility: Visibility = Visibility.default
 }
 
@@ -114,7 +234,9 @@ case class SemanticType(
     genericArguments: List[SemanticType] = List.empty
 ) extends PrettyPrintable {
   override def prettyPrint: String =
-    s"${typeSymbol.prettyPrint}${if (genericArguments.isEmpty) "" else genericArguments.map(_.prettyPrint).mkString("[", ", ", "]")}"
+    s"${typeSymbol.prettyPrint}${
+        if (genericArguments.isEmpty) "" else genericArguments.map(_.prettyPrint).mkString("[", ", ", "]")
+      }"
 }
 
 object SemanticType {
@@ -186,7 +308,12 @@ case class MethodCall(
 case class FieldAccess(fieldSymbol: FieldSymbol, target: BoundExpr, override val semanticType: SemanticType)
     extends BoundExpr
 
-case class BoundBlockExpr(exprs: List[BoundExpr], override val semanticType: SemanticType, scope: Scope, vars: ListBuffer[VariableSymbol] = ListBuffer.empty) extends BoundExpr
+case class BoundBlockExpr(
+    exprs: List[BoundExpr],
+    override val semanticType: SemanticType,
+    scope: Scope,
+    vars: ListBuffer[VariableSymbol] = ListBuffer.empty
+) extends BoundExpr
 
 case class BoundIfExpr(
     expr: BoundExpr,

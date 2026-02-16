@@ -1,10 +1,8 @@
 package symbols.analyser
 
-import ast.{AtomType, FunctionDecl, FunctionType, TraversingVisitor, TupleType, TypeRef}
-import symbols.{FunctionSymbol, SemanticType, TypeSymbol}
-import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType, SemanticContext}
-
-import scala.collection.mutable
+import ast.{AtomType, ClassDecl, FunctionDecl, FunctionType, ObjectDecl, TraversingVisitor, TupleType, TypeRef, TypedefDecl, VariableDecl}
+import symbols.{ClassSymbol, FunctionSymbol, ObjectSymbol, SemanticType, TypeSymbol, TypedefSymbol, VariableSymbol}
+import symbols.analyser.SemanticAnalyser.SemanticContext
 
 class TypeRefQualifier(
     val semanticContext: SemanticContext
@@ -13,8 +11,40 @@ class TypeRefQualifier(
 
   override def visitFunctionDecl(node: FunctionDecl): Unit = {
     super.visitFunctionDecl(node)
-    semanticContext.nodeToSymbol(node).asInstanceOf[FunctionSymbol].returnType =
-      semanticContext.typeRefToSemanticType(node.returnType)
+    semanticContext.nodeToSymbol.get(node).collect { case functionSymbol: FunctionSymbol => functionSymbol }.foreach {
+      _.returnType = semanticContext.typeRefToSemanticType(node.returnType)
+    }
+  }
+
+  override def visitClassDecl(node: ClassDecl): Unit = {
+    super.visitClassDecl(node)
+    semanticContext.nodeToSymbol.get(node).collect { case classSymbol: ClassSymbol => classSymbol }.foreach {
+      _.superClasses ++= node.superClasses.map(semanticContext.typeRefToSemanticType)
+    }
+  }
+
+  override def visitObjectDecl(node: ObjectDecl): Unit = {
+    super.visitObjectDecl(node)
+    semanticContext.nodeToSymbol.get(node).collect { case objectSymbol: ObjectSymbol => objectSymbol }.foreach {
+      _.superClasses ++= node.superClasses.map(semanticContext.typeRefToSemanticType)
+    }
+  }
+
+  override def visitVariableDecl(node: VariableDecl): Unit = {
+    super.visitVariableDecl(node)
+    semanticContext.nodeToSymbol.get(node).collect { case variableSymbol: VariableSymbol => variableSymbol }.foreach {
+      // TODO - Find out which variable decls can have no type
+      // TODO - Enforce that non local variables have a type
+      //      - Or maybe leave it to type inference
+      variableSymbol => variableSymbol.semanticType = semanticContext.typeRefToSemanticType(node.typeRef.get)
+    }
+  }
+
+  override def visitTypedefDecl(node: TypedefDecl): Unit = {
+    super.visitTypedefDecl(node)
+    semanticContext.nodeToSymbol.get(node).collect { case typedefSymbol: TypedefSymbol => typedefSymbol }.foreach {
+      typedefSymbol => typedefSymbol.referredType = semanticContext.typeRefToSemanticType(node.referredType)
+    }
   }
 
   override def visitTypeRef(node: TypeRef): Unit = resolveSemanticType(node)
@@ -37,7 +67,7 @@ class TypeRefQualifier(
 
   private def typeRefToSymbol(node: AtomType): TypeSymbol = {
     semanticContext
-      .nodeToScope(node.name)
+      .nodeToEnclosingScope(node.name)
       .searchForType(node.name)
       .getOrElse(KahwaLangScope.ErrorTypeSymbol)
   }

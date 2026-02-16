@@ -3,7 +3,7 @@ package symbols.analyser
 import ast.*
 import diagnostics.Diagnostic
 import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, MutableTypeRefToSemanticType, SemanticContext}
-import symbols.{BoundExpr, Scope, SemanticType, Symbol, TranslationUnit, TypeSymbol}
+import symbols.*
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -19,10 +19,36 @@ object SemanticAnalyser {
   private[analyser] type MutableBlockToOwnScope = mutable.Map[BlockExpr, Scope]
 
   private[analyser] class SemanticContext {
+    /**
+     * All phases of semantic analysis add to diagnostics
+     */
     val diagnostics: ListBuffer[Diagnostic] = ListBuffer()
-    val nodeToSymbol: MutableNodeToSymbol = mutable.Map()
-    val nodeToScope: MutableNodeToScope = mutable.Map.empty
+    /**
+     * Initialised completely by [[DeclareNames]]
+     *
+     * The following types of nodes have a symbol associated with them:
+     *  - [[KahwaFile]] -> [[TranslationUnit]]
+     *  - [[TypeParameterDecl]] -> [[TypeParameterSymbol]]
+     *  - [[ClassDecl]] -> [[ClassSymbol]]
+     *  - [[ObjectDecl]] -> [[ObjectSymbol]]
+     *  - [[VariableDecl]] -> [[VariableSymbol]] | [[VisibleVariableSymbol]] | [[FieldSymbol]]
+     *  - [[FunctionDecl]] -> [[FunctionSymbol]] | [[MethodSymbol]]
+     *  - [[TypedefDecl]] -> [[TypedefSymbol]]
+     */
+    val nodeToSymbol: MutableNodeToSymbol = mutable.Map.empty
+    /**
+     * Initialised completely by [[AstScopeGenerator]]
+     */
+    val nodeToEnclosingScope: MutableNodeToScope = mutable.Map.empty
+    /**
+     * Initialised completely by [[AstScopeGenerator]]
+     */
     val blockToOwnScope: MutableBlockToOwnScope = mutable.Map.empty
+    /**
+     * Initialised completely by [[TypeRefQualifier]]
+     *
+     * Used by
+     */
     val typeRefToSemanticType: MutableTypeRefToSemanticType = mutable.Map.empty
   }
 

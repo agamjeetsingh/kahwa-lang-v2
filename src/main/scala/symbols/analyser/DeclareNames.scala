@@ -4,14 +4,13 @@ import ast.Modifier.{OVERRIDE, PRIVATE, PROTECTED, PUBLIC}
 import ast.{ClassDecl, Decl, FieldDecl, FunctionDecl, KahwaFile, Modifier, ModifierNode, ObjectDecl, TypeParameterDecl, TypedefDecl, VariableDecl}
 import diagnostics.Diagnostic
 import diagnostics.Diagnostic.{IllegalModifierCombination, ModifierNotAllowed, RepeatedModifier, SymbolAlreadyDeclared}
-import sources.SourceRange
 import symbols.{ClassSymbol, FieldSymbol, FunctionSymbol, MethodSymbol, ObjectSymbol, Scope, Symbol, TranslationUnit, TypeParameterSymbol, TypedefSymbol, VariableSymbol, Visibility, VisibleVariableSymbol}
 import symbols.analyser.SemanticAnalyser.{MutableNodeToSymbol, SemanticContext}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-private class DeclareNames(
+class DeclareNames(
     val semanticContext: SemanticContext
 ) {
   def declareFile(kahwaFile: KahwaFile): TranslationUnit = {
