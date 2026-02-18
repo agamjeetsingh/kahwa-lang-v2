@@ -35,6 +35,10 @@ case class StringLiteral(value: String, range: SourceRange = SourceRange.dummy) 
   override def prettyPrint: String = s"\"$value\""
 }
 
+case class CharLiteral(value: Char, range: SourceRange = SourceRange.dummy) extends LiteralExpr {
+  override def prettyPrint: String = s"\'$value\'"
+}
+
 case class Ident(
     head: String,
     tail: List[String] = List.empty,

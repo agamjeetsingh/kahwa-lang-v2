@@ -36,7 +36,37 @@ class TypeChecker(
         checkWith(boundVariable.semanticType)
         boundVariable
       }
-      case BinaryExpr(expr1, expr2, op, range) => ???
+      case BinaryExpr(expr1, expr2, op, range) => op match {
+        case BinaryOp.EQUALS => ???
+        case BinaryOp.DOUBLE_EQUALS => ???
+        case BinaryOp.LESS => ???
+        case BinaryOp.GREATER => ???
+        case BinaryOp.LESS_EQUALS => ???
+        case BinaryOp.GREATER_EQUALS => ???
+        case BinaryOp.NOT_EQUALS => ???
+        case BinaryOp.PLUS => ???
+        case BinaryOp.MINUS => ???
+        case BinaryOp.STAR => ???
+        case BinaryOp.SLASH => ???
+        case BinaryOp.MODULO => ???
+        case BinaryOp.PLUS_EQUALS => ???
+        case BinaryOp.MINUS_EQUALS => ???
+        case BinaryOp.STAR_EQUALS => ???
+        case BinaryOp.SLASH_EQUALS => ???
+        case BinaryOp.MODULO_EQUALS => ???
+        case BinaryOp.LEFT_SHIFT_EQUALS => ???
+        case BinaryOp.RIGHT_SHIFT_EQUALS => ???
+        case BinaryOp.BITWISE_AND_EQUALS => ???
+        case BinaryOp.BITWISE_OR_EQUALS => ???
+        case BinaryOp.BITWISE_XOR_EQUALS => ???
+        case BinaryOp.LOGICAL_AND => ???
+        case BinaryOp.LOGICAL_OR => ???
+        case BinaryOp.BITWISE_AND => ???
+        case BinaryOp.BITWISE_OR => ???
+        case BinaryOp.BITWISE_XOR => ???
+        case BinaryOp.LEFT_SHIFT => ???
+        case BinaryOp.RIGHT_SHIFT => ???
+      }
       case UnaryExpr(expr, op, range) => op match {
         case UnaryOp.NOT => ???
         case UnaryOp.PLUS => ???

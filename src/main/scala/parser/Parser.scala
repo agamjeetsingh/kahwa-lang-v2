@@ -11,15 +11,6 @@ import parser.Token.{Class, Identifier, Private, RightCurlyBrace, SemiColon, Sub
 import symbols.analyser.AccessCompressor
 import symbols.analyser.SemanticAnalyser
 
-@main
-def main(): Unit = {
-  val (input, _) = Tokeniser.tokenise("a.c.d", 0)
-  given SafePointFunction[Token] = Parser.isSafePointForFile
-  val (optExpr, _, _) = Parser.parseExpr(input)
-  val e = AccessCompressor.transform(optExpr.get)
-  val x = 1
-}
-
 object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
   private type SafePointFunc = SafePointFunction[Token]
@@ -188,6 +179,7 @@ object Parser {
       parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
       parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
       parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
+      parseCharLiteral.map(tok => CharLiteral(tok.value, tok.range)),
       parseIdentifier.map(tok => ExprIdent(tok.value, List.empty, tok.range)),
       parseContinue.map(tok => ContinueExpr(tok.range)),
       parseBreak.map(tok => BreakExpr(tok.range))
