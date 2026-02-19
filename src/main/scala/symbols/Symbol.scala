@@ -35,8 +35,19 @@ sealed abstract class NonOverloadableTermSymbol(name: String, scope: Scope) exte
 class TypeParameterSymbol(
     override val name: String,
     outerScope: Scope,
-    variance: Variance
-) extends TypeSymbol(name, outerScope)
+    val variance: Variance
+) extends TypeSymbol(name, outerScope) {
+
+  /**
+   * Initialised completely by [[TypeRefQualifier]]
+   */
+  val upperBounds: ListBuffer[SemanticType] = ListBuffer.empty
+
+  /**
+   * Initialised completely by [[TypeRefQualifier]]
+   */
+  val lowerBounds: ListBuffer[SemanticType] = ListBuffer.empty
+}
 
 /**
  * Initialised completely by [[DeclareNames]]

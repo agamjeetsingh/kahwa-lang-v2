@@ -1,7 +1,7 @@
 package symbols.analyser
 
-import ast.{AtomType, ClassDecl, FunctionDecl, FunctionType, ObjectDecl, TraversingVisitor, TupleType, TypeRef, TypedefDecl, VariableDecl}
-import symbols.{ClassSymbol, FunctionSymbol, ObjectSymbol, SemanticType, TypeSymbol, TypedefSymbol, VariableSymbol}
+import ast.{AtomType, ClassDecl, FunctionDecl, FunctionType, ObjectDecl, TraversingVisitor, TupleType, TypeParameterDecl, TypeRef, TypedefDecl, VariableDecl}
+import symbols.{ClassSymbol, FunctionSymbol, ObjectSymbol, SemanticType, TypeParameterSymbol, TypeSymbol, TypedefSymbol, VariableSymbol}
 import symbols.analyser.SemanticAnalyser.SemanticContext
 
 class TypeRefQualifier(
@@ -47,6 +47,15 @@ class TypeRefQualifier(
     }
   }
 
+  override def visitTypeParameterDecl(node: TypeParameterDecl): Unit = {
+    super.visitTypeParameterDecl(node)
+    semanticContext.nodeToSymbol.get(node).collect { case typeParameterSymbol: TypeParameterSymbol => typeParameterSymbol }.foreach {
+      typeParameterSymbol => 
+        typeParameterSymbol.lowerBounds ++= node.lowerBounds.map(semanticContext.typeRefToSemanticType)
+        typeParameterSymbol.upperBounds ++= node.upperBounds.map(semanticContext.typeRefToSemanticType)
+    }
+  }
+
   override def visitTypeRef(node: TypeRef): Unit = resolveSemanticType(node)
 
   private def resolveSemanticType(node: TypeRef): SemanticType = {
@@ -69,6 +78,6 @@ class TypeRefQualifier(
     semanticContext
       .nodeToEnclosingScope(node.name)
       .searchForType(node.name)
-      .getOrElse(KahwaLangScope.ErrorTypeSymbol)
+      .getOrElse(KahwaLangScope.getTypeSymbol(KahwaLangScope.ErrorType))
   }
 }
