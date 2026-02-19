@@ -10,7 +10,7 @@ import scala.collection.mutable
 object KahwaLangScope extends Scope {
 
   private def createInbuiltType(name: String): SemanticType = {
-    val typeSymbol: TypeSymbol = TypeSymbol(name, KahwaLangScope)
+    val typeSymbol: TypeSymbol = ClassSymbol(name, KahwaLangScope)
     val semanticType: SemanticType = SemanticType(typeSymbol)
     semanticTypeToSymbol(semanticType) = typeSymbol
     define(typeSymbol)
@@ -61,7 +61,7 @@ object KahwaLangScope extends Scope {
   
   private def instantiateFunctionX(x: Int): ClassSymbol = {
     require(x >= MIN_FUNCTION_SIZE && x <= MAX_FUNCTION_SIZE)
-    val classSymbol = ClassSymbol(s"Tuple${x.toString}", KahwaLangScope)
+    val classSymbol = ClassSymbol(s"Function${x.toString}", KahwaLangScope)
     classSymbol.genericArguments ++= (1 to x).map(n => TypeParameterSymbol(s"T$n", classSymbol.scope, CONTRAVARIANT))
     classSymbol.genericArguments += TypeParameterSymbol("R", classSymbol.scope, COVARIANT)
     classSymbol
@@ -81,7 +81,7 @@ object KahwaLangScope extends Scope {
     functionSymbol
   }
 
-  val implicitConversions: mutable.Map[(SemanticType, SemanticType), FunctionSymbol] = mutable.Map.empty
+  private val implicitConversions: mutable.Map[(SemanticType, SemanticType), FunctionSymbol] = mutable.Map.empty
 
   private def createImplicitConvertor(from: SemanticType, to: SemanticType): Unit = {
     implicitConversions += (from, to) -> createNativeFunc(s"--${from.prettyPrint}-to-${to.prettyPrint}--", to, List(from))

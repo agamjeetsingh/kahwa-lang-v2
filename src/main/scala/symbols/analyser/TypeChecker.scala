@@ -37,59 +37,63 @@ class TypeChecker(
         boundVariable
       }
       case BinaryExpr(expr1, expr2, op, range) => op match {
-        case BinaryOp.EQUALS => ???
-        case BinaryOp.DOUBLE_EQUALS => ???
-        case BinaryOp.LESS => ???
-        case BinaryOp.GREATER => ???
-        case BinaryOp.LESS_EQUALS => ???
-        case BinaryOp.GREATER_EQUALS => ???
-        case BinaryOp.NOT_EQUALS => ???
-        case BinaryOp.PLUS => ???
-        case BinaryOp.MINUS => ???
-        case BinaryOp.STAR => ???
-        case BinaryOp.SLASH => ???
-        case BinaryOp.MODULO => ???
-        case BinaryOp.PLUS_EQUALS => ???
-        case BinaryOp.MINUS_EQUALS => ???
-        case BinaryOp.STAR_EQUALS => ???
-        case BinaryOp.SLASH_EQUALS => ???
-        case BinaryOp.MODULO_EQUALS => ???
-        case BinaryOp.LEFT_SHIFT_EQUALS => ???
-        case BinaryOp.RIGHT_SHIFT_EQUALS => ???
-        case BinaryOp.BITWISE_AND_EQUALS => ???
-        case BinaryOp.BITWISE_OR_EQUALS => ???
-        case BinaryOp.BITWISE_XOR_EQUALS => ???
-        case BinaryOp.LOGICAL_AND => ???
-        case BinaryOp.LOGICAL_OR => ???
-        case BinaryOp.BITWISE_AND => ???
-        case BinaryOp.BITWISE_OR => ???
-        case BinaryOp.BITWISE_XOR => ???
-        case BinaryOp.LEFT_SHIFT => ???
-        case BinaryOp.RIGHT_SHIFT => ???
-      }
-      case UnaryExpr(expr, op, range) => op match {
-        case UnaryOp.NOT => ???
-        case UnaryOp.PLUS => ???
-        case UnaryOp.MINUS => ???
-        case UnaryOp.POST_INCREMENT => ???
-        case UnaryOp.POST_DECREMENT => ???
-        case UnaryOp.PRE_INCREMENT => ???
-        case UnaryOp.PRE_DECREMENT => ???
-      }
-      case CallExpr(callee, args, range) => callee match {
-        case exprIdent: ExprIdent => {
-          val boundArgs = args.map(check(_))
-          val optionalFunctions = semanticContext.nodeToEnclosingScope(expr).searchForOverloadableTerm(exprIdent)
-          // TODO - Ignore for now the possibility of a term with apply methods
-          val validCandidates = optionalFunctions.map(_.collect {
-            case functionSymbol: FunctionSymbol if funcValid(functionSymbol, boundArgs.map(_.semanticType)) => functionSymbol
-          }).toList.flatten // TODO - Ignore out of scope function for now
-          // TODO - This won't be true for implicit method calls like this.foo()
-          // TODO - Not sure if return type is resolved properly
-          FunctionCall(validCandidates.head, List.empty, boundArgs, validCandidates.head.returnType)
+          case BinaryOp.EQUALS => ???
+          case BinaryOp.DOUBLE_EQUALS => ???
+          case BinaryOp.LESS => ???
+          case BinaryOp.GREATER => ???
+          case BinaryOp.LESS_EQUALS => ???
+          case BinaryOp.GREATER_EQUALS => ???
+          case BinaryOp.NOT_EQUALS => ???
+          case BinaryOp.PLUS => ???
+          case BinaryOp.MINUS => ???
+          case BinaryOp.STAR => ???
+          case BinaryOp.SLASH => ???
+          case BinaryOp.MODULO => ???
+          case BinaryOp.PLUS_EQUALS => ???
+          case BinaryOp.MINUS_EQUALS => ???
+          case BinaryOp.STAR_EQUALS => ???
+          case BinaryOp.SLASH_EQUALS => ???
+          case BinaryOp.MODULO_EQUALS => ???
+          case BinaryOp.LEFT_SHIFT_EQUALS => ???
+          case BinaryOp.RIGHT_SHIFT_EQUALS => ???
+          case BinaryOp.BITWISE_AND_EQUALS => ???
+          case BinaryOp.BITWISE_OR_EQUALS => ???
+          case BinaryOp.BITWISE_XOR_EQUALS => ???
+          case BinaryOp.LOGICAL_AND => ???
+          case BinaryOp.LOGICAL_OR => ???
+          case BinaryOp.BITWISE_AND => ???
+          case BinaryOp.BITWISE_OR => ???
+          case BinaryOp.BITWISE_XOR => ???
+          case BinaryOp.LEFT_SHIFT => ???
+          case BinaryOp.RIGHT_SHIFT => ???
         }
-        case _ => ???
-      }
+      case UnaryExpr(expr, op, range) => op match {
+          case UnaryOp.NOT => ???
+          case UnaryOp.PLUS => ???
+          case UnaryOp.MINUS => ???
+          case UnaryOp.POST_INCREMENT => ???
+          case UnaryOp.POST_DECREMENT => ???
+          case UnaryOp.PRE_INCREMENT => ???
+          case UnaryOp.PRE_DECREMENT => ???
+        }
+      case CallExpr(callee, args, range) => callee match {
+          case exprIdent: ExprIdent => {
+            val boundArgs = args.map(check(_))
+            val optionalFunctions = semanticContext.nodeToEnclosingScope(expr).searchForOverloadableTerm(exprIdent)
+            // TODO - Ignore for now the possibility of a term with apply methods
+            val validCandidates = optionalFunctions
+              .map(_.collect {
+                case functionSymbol: FunctionSymbol if funcValid(functionSymbol, boundArgs.map(_.semanticType)) =>
+                  functionSymbol
+              })
+              .toList
+              .flatten // TODO - Ignore out of scope function for now
+            // TODO - This won't be true for implicit method calls like this.foo()
+            // TODO - Not sure if return type is resolved properly
+            FunctionCall(validCandidates.head, List.empty, boundArgs, validCandidates.head.returnType)
+          }
+          case _ => ???
+        }
       case MemberAccessExpr(base, member, range) => ???
       case blockExpr: BlockExpr => {
         stack += ListBuffer.empty
@@ -175,7 +179,7 @@ class TypeChecker(
 
   case class TypeConstraint(subTypeOf: SemanticType, superTypeOf: SemanticType) {
     def isSatisfiedBy(semanticType: SemanticType)(using range: SourceRange): Option[Diagnostic] = {
-      if (semanticType < subTypeOf && superTypeOf < semanticType) {
+      if (semanticType.subtypeOf(subTypeOf) && superTypeOf.subtypeOf(semanticType)) {
         None
       } else {
 //        ??? // TODO - Should have both superTypeOf and subtypeOf
@@ -193,10 +197,10 @@ class TypeChecker(
 
     val Nothing = TypeConstraint(KahwaLangScope.AnyType, KahwaLangScope.NothingType)
   }
-  
+
   private def funcValid(functionSymbol: FunctionSymbol, args: List[SemanticType]): Boolean = {
     val expectedArgs = functionSymbol.parameters.map(_.semanticType)
     if (expectedArgs.size != args.size) return false
-    args.zip(expectedArgs).forall { case (a, b) => a < b }
+    args.zip(expectedArgs).forall { case (a, b) => a subtypeOf b }
   }
 }

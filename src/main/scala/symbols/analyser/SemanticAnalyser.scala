@@ -45,9 +45,9 @@ object SemanticAnalyser {
      */
     val blockToOwnScope: MutableBlockToOwnScope = mutable.Map.empty
     /**
-     * Initialised completely by [[TypeRefQualifier]]
+     * Initialised mostly by [[TypeRefQualifier]], the exception being local variables
      *
-     * Used by
+     * Used by [[TypeChecker]] for local variables that have types mentioned
      */
     val typeRefToSemanticType: MutableTypeRefToSemanticType = mutable.Map.empty
   }
