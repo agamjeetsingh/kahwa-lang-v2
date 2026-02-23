@@ -126,3 +126,81 @@ Float -> Double
 Any -> Unit // Value discarding
 ```
 
+## Expression Evaluation
+
+TODO - Currently don't have long literals etc. in grammar
+
+### Literals
+```
+CharLiteral -> Char
+IntLiteral -> Int
+LongLiteral -> Long
+FloatLiteral -> Float
+DoubleLiteral -> Double
+BooleanLiteral -> Bool
+StringLiteral -> String
+```
+
+### Identifier
+
+### BinaryExpr
+
+| Operator Group          | Specific Ops                                       | Supported Types                                        |
+|:------------------------|:---------------------------------------------------|:-------------------------------------------------------|
+| **Assignment**          | `EQUALS` (=)                                       | All                                                    |
+| **Arithmetic**          | `PLUS`, `MINUS`, `STAR`, `SLASH`, `MODULO`         | Char, Int, Long, Float, Double                         |
+| **Equality**            | `DOUBLE_EQUALS`, `NOT_EQUALS`                      | ???                                                    |
+| **Comparison**          | `LESS`, `GREATER`, `LESS_EQUALS`, `GREATER_EQUALS` | Char, Int, Long, Float, Double                         |
+| **Bitwise**             | `BITWISE_AND`, `BITWISE_OR`, `BITWISE_XOR`         | Int, Long                                              |
+| **Shifts**              | `LEFT_SHIFT`, `RIGHT_SHIFT`                        | Int, Long                                              |
+| **Logical**             | `LOGICAL_AND`, `LOGICAL_OR`                        | Bool                                                   |
+| **Compound Assignment** | `PLUS_EQUALS`, `MINUS_EQUALS`, `STAR_EQUALS`, etc. | Depends on the operator (see Arithmetic/Bitwise above) |
+
+In all of these, types can be coerced to a larger type if required, according to the permitted type coercions mentioned in a previous section.
+For example, `x + y` with `x: Int` and `y: Float` is allowed and `x` will get promoted to `Float`.
+
+### UnaryExpr
+
+| Operator Group          | Specific Ops                                                          | Supported Java Types           |
+|:------------------------|:----------------------------------------------------------------------|:-------------------------------|
+| **Logical NOT**         | `NOT`                                                                 | Bool                           |
+| **Unary Plus**          | `PLUS`                                                                | Char, Int, Long, Float, Double |
+| **Arithmetic Negation** | `MINUS`                                                               | Char, Int, Long, Float, Double |
+| **Increment/Decrement** | `PRE_INCREMENT`, `PRE_DECREMENT`, `POST_INCREMENT`, `POST_DECREMENT`  | Char, Int, Long, Float, Double |
+
+### Variable Decl
+
+All variable declarations evaluate to Unit.
+
+### CallExpr
+
+### Member Access Expr
+
+### BlockExpr
+
+The type of a block expression is the type of its last expression or Unit if the block is empty.
+
+### IfExpr
+
+An if expression's condition must have a type that is `<: Bool`.
+If the else branch of an if expression is missing, then its type is simply the type of its if expression.
+If the else branch does exist, then the if expression's type is the least upper bound of the types of the if and else expressions.
+
+### WhileExpr
+
+A while expression's condition must have a type that is `<: Bool`.
+The while expression itself evaluates to Unit.
+
+### BreakExpr
+
+A break expression has type Nothing. It is only allowed inside a while loop and evaluating it breaks the program out of the loop.
+
+### ContinueExpr
+
+A continue expression has type Nothing. It is only allowed inside a while loop and evaluating it jumps the program to the while loop's condition check.
+
+### LambdaExpr
+
+
+
+### TupleExpr
