@@ -177,7 +177,7 @@ class TypeChecker(
     semanticContext.diagnostics ++= typeConstraint.isSatisfiedBy(semanticType)
   }
 
-  case class TypeConstraint(subTypeOf: SemanticType, superTypeOf: SemanticType) {
+  class TypeConstraint(var subTypeOf: SemanticType, var superTypeOf: SemanticType) {
     def isSatisfiedBy(semanticType: SemanticType)(using range: SourceRange): Option[Diagnostic] = {
       if (semanticType.subtypeOf(subTypeOf) && superTypeOf.subtypeOf(semanticType)) {
         None

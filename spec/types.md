@@ -2,6 +2,7 @@
 
 We would use "<:" to denote "is subtype of" and ">:" to denote "is super type of".
 As expected, the subtyping relation is reflexive (`T <: T` for all types `T`) and transitive (`T <: U` and `U <: V` implies `T <: V`).
+Also `T <: U` if and only if `U >: T`.
 
 ## Type declarations
 
