@@ -78,8 +78,7 @@ object SemanticAnalyser {
 
     // Phase 7:
 
-    val boundExprs = TypeCheck(semanticContext).visitKahwaFile(kahwaFile)
-    println(boundExprs.mkString("\n"))
+    TypeCheck(semanticContext).visitKahwaFile(kahwaFile)
 
     (translationUnit, semanticContext.diagnostics.toList)
   }
