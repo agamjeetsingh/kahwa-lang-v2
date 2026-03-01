@@ -1,24 +1,159 @@
 package symbols
 
+import ast.{ExprIdent, Ident}
+import cats.data.NonEmptyList
+import sources.SourceRange
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-
-type SymbolTable = mutable.Map[String, mutable.ListBuffer[Symbol]]
+import symbols.TypeSymbol
 
 class Scope {
-  def searchCurrent(name: String): List[Symbol] = {
-    table.getOrElse(name, Nil).toList
+
+  // ===== Searching for types =====
+  def searchForType(exprIdent: ExprIdent): Option[TypeSymbol] = {
+    searchForType(Ident(exprIdent.head, exprIdent.tail, exprIdent.range))
   }
 
-  def search(name: String): List[Symbol] = {
-    table.getOrElse(name, outerScopes.iterator
-      .map(_.search(name))
-      .find(_.nonEmpty)
-      .getOrElse(Nil)).toList
+  def searchForType(name: String): Option[TypeSymbol] = searchForType(Ident(name))
+
+  def searchForType(ident: Ident): Option[TypeSymbol] = {
+    // a.b.c
+    def rec(head: String, tail: List[String]): Option[TypeSymbol] = {
+      // head = a; tail = List(b, c)
+      tail match {
+        case nextHead :: nextTail =>
+          typeSymbolTable.get(head) match {
+            case Some(typeSymbol: ClassSymbol) =>
+              typeSymbol.scope.searchForType(
+                Ident(nextHead, nextTail, ident.range)
+              ) match {
+                case None => searchInParent() // (b.c) didn't get resolved correctly
+                case res => res // Full a.b.c got resolved
+              }
+            case _ => searchInParent() // a doesn't exist in current scope or is not a class
+          }
+        case Nil =>
+          typeSymbolTable.get(head) match {
+            case None => searchInParent()
+            case result => result
+          }
+      }
+    }
+
+    def searchInParent(): Option[TypeSymbol] = {
+      outerScopes.iterator
+        .map(_.searchForType(ident))
+        .find(_.nonEmpty)
+        .flatten
+    }
+
+    ident match {
+      case Ident(head, tail, _) => rec(head, tail)
+    }
   }
+
+  // ===== Search for terms =====
+
+  def searchForTerm(exprIdent: ExprIdent, current: Boolean): TermSearchResult = {
+    searchForTerm(Ident(exprIdent.head, exprIdent.tail, exprIdent.range), current)
+  }
+
+  def searchForTerm(name: String, current: Boolean): TermSearchResult = {
+    searchForTerm(Ident(name, List.empty, SourceRange.dummy), current)
+  }
+
+  def searchForTerm(ident: Ident, current: Boolean = false): TermSearchResult = {
+    // a.b.c
+    def rec(head: String, tail: List[String]): TermSearchResult = {
+      // head = a; tail = List(b, c)
+      tail match {
+        case nextHead :: nextTail =>
+          typeSymbolTable.get(head) match {
+            case Some(classSymbol: ClassSymbol) =>
+              classSymbol.scope.searchForTerm(
+                Ident(nextHead, nextTail, ident.range)
+              ) match {
+                case None =>
+                  if (!current) searchInParent() else None // (b.c) didn't get resolved correctly
+                case res => res // Full a.b.c got resolved
+              }
+            case _ => if (!current) searchInParent() // a doesn't exist in current scope or is not a class
+              else None
+          }
+        case Nil =>
+          termSymbolTable.get(head) match {
+            case Some(symbol: NonOverloadableTermSymbol) => Some(symbol)
+            case Some(symbols: ListBuffer[OverloadableTermSymbol]) =>
+              NonEmptyList.fromList(symbols.toList)
+            case None => if (!current) searchInParent() else None
+          }
+      }
+    }
+
+    def searchInParent(): TermSearchResult = {
+      outerScopes.iterator
+        .map(_.searchForTerm(ident))
+        .find(_.nonEmpty)
+        .flatten
+    }
+
+    ident match {
+      case Ident(head, tail, _) => rec(head, tail)
+    }
+  }
+
+  def searchForOverloadableTerm(name: String): Option[NonEmptyList[OverloadableTermSymbol]] = {
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
+    }
+  }
+
+  def searchForOverloadableTerm(name: Ident): Option[NonEmptyList[OverloadableTermSymbol]] = {
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
+    }
+  }
+
+  def searchForOverloadableTerm(name: ExprIdent): Option[NonEmptyList[OverloadableTermSymbol]] = {
+    searchForTerm(name, false).collect { case res: NonEmptyList[OverloadableTermSymbol] @unchecked =>
+      res
+    }
+  }
+
+  def searchForNonOverloadableTerm(name: String): Option[NonOverloadableTermSymbol] = {
+    searchForTerm(name, false).collect { case res: NonOverloadableTermSymbol =>
+      res
+    }
+  }
+
+  def searchForNonOverloadableTerm(name: Ident): Option[NonOverloadableTermSymbol] = {
+    searchForTerm(name).collect { case res: NonOverloadableTermSymbol =>
+      res
+    }
+  }
+
+  def searchForNonOverloadableTerm(name: ExprIdent): Option[NonOverloadableTermSymbol] = {
+    searchForTerm(name, false).collect { case res: NonOverloadableTermSymbol =>
+      res
+    }
+  }
+
+  // ===== Define new symbols =====
 
   def define(symbol: Symbol): Unit = {
-    table.getOrElse(symbol.name, ListBuffer.empty) += symbol
+    symbol match {
+      case symbol: TypeSymbol =>
+        typeSymbolTable(symbol.name) = symbol
+      case symbol: OverloadableTermSymbol =>
+        termSymbolTable.get(symbol.name) match {
+          case Some(buffer: ListBuffer[OverloadableTermSymbol]) => buffer += symbol
+          case _ => termSymbolTable(symbol.name) = ListBuffer(symbol)
+        }
+      case symbol: NonOverloadableTermSymbol =>
+        termSymbolTable(symbol.name) = symbol
+      case _: TranslationUnit => // TranslationUnits are not stored in scope
+    }
   }
 
   def defineAll(symbols: List[Symbol]): Unit = {
@@ -29,7 +164,12 @@ class Scope {
     outerScopes += outerScope
   }
 
-  private val table: SymbolTable = mutable.Map.empty
+  type TypeSymbolTable = mutable.Map[String, TypeSymbol]
+  type TermSymbolTable = mutable.Map[String, NonOverloadableTermSymbol | ListBuffer[OverloadableTermSymbol]]
+  type TermSearchResult = Option[NonEmptyList[OverloadableTermSymbol] | NonOverloadableTermSymbol]
+
+  protected val typeSymbolTable: TypeSymbolTable = mutable.Map.empty
+  protected val termSymbolTable: TermSymbolTable = mutable.Map.empty
 
   private val outerScopes: mutable.ListBuffer[Scope] = mutable.ListBuffer.empty
 }

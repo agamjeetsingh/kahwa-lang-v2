@@ -3,7 +3,6 @@ package parser
 import ast.PrettyPrintable
 import sources.SourceRange
 
-
 enum Token extends PrettyPrintable {
   // Delimiters
   val range: SourceRange
@@ -93,11 +92,19 @@ enum Token extends PrettyPrintable {
   case Question(range: SourceRange) extends Token
 
   case Dot(range: SourceRange) extends Token
+  
+  case Arrow(range: SourceRange) extends Token
+  
+  case SubtypeOp(range: SourceRange) extends Token
+  
+  case SupertypeOp(range: SourceRange) extends Token
+  
+  case Val(range: SourceRange) extends Token
+  
+  case Var(range: SourceRange) extends Token
 
   // Keywords
   case Class(range: SourceRange) extends Token
-
-  case Static(range: SourceRange) extends Token
 
   case Public(range: SourceRange) extends Token
 
@@ -115,11 +122,11 @@ enum Token extends PrettyPrintable {
 
   case Typedef(range: SourceRange) extends Token
 
-  case In(range: SourceRange) extends Token
-
-  case Out(range: SourceRange) extends Token
-
   case Override(range: SourceRange) extends Token
+
+  case ObjectTok(range: SourceRange) extends Token
+
+  case Def(range: SourceRange) extends Token
 
   // Control flow
   case Return(range: SourceRange) extends Token
@@ -140,9 +147,7 @@ enum Token extends PrettyPrintable {
   case True(range: SourceRange) extends Token
 
   case False(range: SourceRange) extends Token
-
-  case NullLiteral(range: SourceRange) extends Token
-
+  
   // Tokens with values
   case Identifier(value: String, range: SourceRange) extends Token
 
@@ -153,14 +158,14 @@ enum Token extends PrettyPrintable {
   case IntegerLiteral(value: Int, range: SourceRange) extends Token
 
   case FloatLiteral(value: Float, range: SourceRange) extends Token
-  
+
   def isModifier: Boolean = this match {
-    case (_: Token.Static) | (_: Token.Public) | (_: Token.Private) |
-         (_: Token.Protected) | (_: Token.Open) | (_: Token.Final) |
-         (_: Token.Abstract) => true
+    case (_: Token.Public) | (_: Token.Private) | (_: Token.Protected) | (_: Token.Open) |
+      (_: Token.Final) | (_: Token.Abstract) | (_: Token.Override) =>
+      true
     case _ => false
   }
-  
+
   override def prettyPrint: String = this match {
     case Token.Colon(_) => ":"
     case Token.SemiColon(_) => ";"
@@ -205,8 +210,12 @@ enum Token extends PrettyPrintable {
     case Token.RightShift(_) => ">>"
     case Token.Question(_) => "?"
     case Token.Dot(_) => "."
+    case Token.Arrow(_) => "=>"
+    case Token.SubtypeOp(_) => "<:"
+    case Token.SupertypeOp(_) => ">:"
+    case Token.Val(_) => "val"
+    case Token.Var(_) => "var"
     case Token.Class(_) => "class"
-    case Token.Static(_) => "static"
     case Token.Public(_) => "public"
     case Token.Private(_) => "private"
     case Token.Protected(_) => "protected"
@@ -215,9 +224,9 @@ enum Token extends PrettyPrintable {
     case Token.Abstract(_) => "abstract"
     case Token.Interface(_) => "interface"
     case Token.Typedef(_) => "typedef"
-    case Token.In(_) => "in"
-    case Token.Out(_) => "out"
     case Token.Override(_) => "override"
+    case Token.ObjectTok(_) => "object"
+    case Token.Def(_) => "def"
     case Token.Return(_) => "return"
     case Token.If(_) => "if"
     case Token.Else(_) => "else"
@@ -227,7 +236,6 @@ enum Token extends PrettyPrintable {
     case Token.Continue(_) => "continue"
     case Token.True(_) => "true"
     case Token.False(_) => "false"
-    case Token.NullLiteral(_) => "null"
     case Token.Identifier(value, _) => value
     case Token.StringLiteral(value, _) => s""""$value""""
     case Token.CharLiteral(value, _) => value.toString

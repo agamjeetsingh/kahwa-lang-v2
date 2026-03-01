@@ -3,7 +3,7 @@ package ast
 import sources.SourceRange
 
 import scala.annotation.targetName
-import symbols.Symbol
+import symbols.{Scope, Symbol}
 
 sealed trait AstNode extends PrettyPrintable {
   def range: SourceRange
@@ -31,22 +31,33 @@ case class IntegerLiteral(value: Int, range: SourceRange = SourceRange.dummy) ex
   override def prettyPrint: String = value.toString
 }
 
-case class NullLiteral(range: SourceRange = SourceRange.dummy) extends LiteralExpr {
-  override def prettyPrint: String = "null"
-}
-
 case class StringLiteral(value: String, range: SourceRange = SourceRange.dummy) extends LiteralExpr {
-  override def prettyPrint: String = value
+  override def prettyPrint: String = s"\"$value\""
 }
 
-sealed trait Ident extends Expr {
-  def name: String
-  override def prettyPrint: String = name
+case class CharLiteral(value: Char, range: SourceRange = SourceRange.dummy) extends LiteralExpr {
+  override def prettyPrint: String = s"\'$value\'"
 }
 
-case class Unqual(name: String, range: SourceRange = SourceRange.dummy) extends Ident
+case class Ident(
+    head: String,
+    tail: List[String] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends AstNode {
+  override def prettyPrint: String = (head :: tail).mkString(".")
 
-case class Qual(name: String, symbol: Symbol, range: SourceRange = SourceRange.dummy) extends Ident
+  def name: String = (head :: tail).last
+}
+
+case class ExprIdent(
+    head: String,
+    tail: List[String] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String = (head :: tail).mkString(".")
+
+  def name: String = (head :: tail).last
+}
 
 enum BinaryOp extends PrettyPrintable {
   case EQUALS // "="
@@ -112,8 +123,14 @@ enum BinaryOp extends PrettyPrintable {
   }
 }
 
-case class BinaryExpr(expr1: Expr, expr2: Expr, op: BinaryOp, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"(${expr1.prettyPrint} ${op.prettyPrint} ${expr2.prettyPrint})"
+case class BinaryExpr(
+    expr1: Expr,
+    expr2: Expr,
+    op: BinaryOp,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String =
+    s"(${expr1.prettyPrint} ${op.prettyPrint} ${expr2.prettyPrint})"
 }
 
 enum UnaryOp extends PrettyPrintable {
@@ -136,71 +153,90 @@ enum UnaryOp extends PrettyPrintable {
   }
 }
 
-case class UnaryExpr(expr: Expr, op: UnaryOp, range: SourceRange = SourceRange.dummy) extends Expr {
+case class UnaryExpr(
+    expr: Expr,
+    op: UnaryOp,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
   override def prettyPrint: String = op match {
-    case UnaryOp.POST_INCREMENT | UnaryOp.POST_DECREMENT => s"(${expr.prettyPrint}${op.prettyPrint})"
+    case UnaryOp.POST_INCREMENT | UnaryOp.POST_DECREMENT =>
+      s"(${expr.prettyPrint}${op.prettyPrint})"
     case _ => s"(${op.prettyPrint}${expr.prettyPrint})"
   }
 }
 
-case class CallExpr(callee: Expr, args: List[Expr], range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${callee.prettyPrint}${args.map(_.prettyPrint).mkString("(", ", ", ")")}"
+case class CallExpr(
+    callee: Expr,
+    args: List[Expr],
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String =
+    s"${callee.prettyPrint}${args.map(_.prettyPrint).mkString("(", ", ", ")")}"
 }
 
-case class IndexExpr(callee: Expr, arg: Expr, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${callee.prettyPrint}[${arg.prettyPrint}]"
+case class MemberAccessExpr(
+    base: Expr,
+    member: ExprIdent,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String = s"${base.prettyPrint}.${member.prettyPrint}"
 }
 
-case class MemberAccessExpr(base: Expr, member: Ident, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${base.prettyPrint}.$member"
+case class BlockExpr(exprs: List[Expr], range: SourceRange = SourceRange.dummy) extends Expr {
+  override def prettyPrint: String = {
+    def needsSemicolon(e: Expr) = e match {
+      case _: BlockExpr | _: IfExpr | _: WhileExpr | _: VariableDecl => false
+      case _ => true
+    }
+    exprs
+      .map(e =>
+        if (needsSemicolon(e)) s"${e.prettyPrint};"
+        else e.prettyPrint
+      )
+      .mkString("{\n", "\n", "\n}")
+  }
 }
 
-case class TernaryExpr(cond: Expr, expr1: Expr, expr2: Expr, range: SourceRange = SourceRange.dummy) extends Expr {
-  override def prettyPrint: String = s"${cond.prettyPrint} ? ${expr1.prettyPrint} : ${expr2.prettyPrint}"
+case class IfExpr(
+    expr: Expr,
+    ifBlock: BlockExpr,
+    elseBlock: Option[BlockExpr] = None,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String =
+    s"if (${expr.prettyPrint}) ${ifBlock.prettyPrint}${elseBlock match {
+        case Some(block) => s" else ${block.prettyPrint}"
+        case None => ""
+      }}"
 }
 
-// ===== Statements =====
-
-sealed trait Stmt extends AstNode
-
-case class BreakStmt(range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = "break;"
+case class WhileExpr(
+    cond: Expr,
+    body: BlockExpr,
+    range: SourceRange = SourceRange.dummy
+) extends Expr {
+  override def prettyPrint: String = {
+    s"while (${cond.prettyPrint}) ${body.prettyPrint}"
+  }
 }
 
-case class ContinueStmt(range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = "continue;"
+case class BreakExpr(range: SourceRange = SourceRange.dummy) extends Expr {
+  override def prettyPrint: String = "break"
 }
 
-case class ExprStmt(expr: Expr, range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = s"${expr.prettyPrint};"
+case class ContinueExpr(range: SourceRange = SourceRange.dummy) extends Expr {
+  override def prettyPrint: String = "continue"
 }
 
-case class BlockStmt(stmts: List[Stmt], range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = stmts.map(_.prettyPrint).mkString("{\n", "\n", "\n}\n")
+// TODO - Not sure how the parameter types are determined
+case class LambdaExpr(paramList: List[VariableDecl], body: Expr, range: SourceRange = SourceRange.dummy) extends Expr {
+  override def prettyPrint: String = s"((${paramList.map(_.prettyPrintParam).mkString(", ")}) => ${body.prettyPrint})"
 }
 
-case class IfStmt(expr: Expr, ifBlock: BlockStmt, elseBlock: Option[BlockStmt] = None, range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = s"if (${expr.prettyPrint}) ${ifBlock.prettyPrint}${
-    elseBlock match {
-      case Some(block) => s" else ${block.prettyPrint}"
-      case None => ""
-    }}"
+case class TupleExpr(elements: List[Expr], range: SourceRange) extends Expr {
+  require(elements.size >= 2)
+  override def prettyPrint: String = elements.map(_.prettyPrint).mkString("(", ", ", ")")
 }
-
-case class ReturnStmt(expr: Expr, range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = s"return ${expr.prettyPrint};"
-}
-
-case class WhileStmt(cond: Expr, body: BlockStmt, range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = s"while (${cond.prettyPrint}) ${body.prettyPrint}"
-}
-
-case class VariableDeclStmt(variableDecl: VariableDecl, range: SourceRange = SourceRange.dummy) extends Stmt {
-  override def prettyPrint: String = variableDecl.prettyPrint
-}
-
-// TODO - For loop
-
 
 // ===== Types =====
 
@@ -210,21 +246,40 @@ enum Variance extends PrettyPrintable {
   case INVARIANT
 
   override def prettyPrint: String = this match {
-    case Variance.COVARIANT => "out "
-    case Variance.CONTRAVARIANT => "in "
+    case Variance.COVARIANT => "+"
+    case Variance.CONTRAVARIANT => "-"
     case Variance.INVARIANT => ""
   }
 }
 
-case class TypeRef(name: Ident, args: List[(TypeRef, Variance)], range: SourceRange = SourceRange.dummy) extends AstNode {
-  override def prettyPrint: String = {
-    val prettyArgs = if args.nonEmpty then args.map {
-      (typeRef, variance) => s"${variance.prettyPrint}${typeRef.prettyPrint}"
-    }.mkString("[", ", ", "]")
-    else ""
+sealed trait TypeRef extends AstNode
 
-    s"$name$prettyArgs"
+case class AtomType(
+    name: Ident,
+    args: List[TypeRef] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends TypeRef {
+  override def prettyPrint: String = {
+    val prettyArgs =
+      if args.nonEmpty then args.map(_.prettyPrint).mkString("[", ", ", "]")
+      else ""
+
+    s"${name.prettyPrint}$prettyArgs"
   }
+}
+
+case class TupleType(
+    elems: List[TypeRef],
+    range: SourceRange = SourceRange.dummy
+) extends TypeRef {
+  override def prettyPrint: String =
+    s"(${elems.map(_.prettyPrint).mkString(", ")})"
+}
+
+case class FunctionType(paramList: List[TypeRef], returnType: TypeRef, range: SourceRange = SourceRange.dummy)
+    extends TypeRef {
+  override def prettyPrint: String =
+    s"((${paramList.map(_.prettyPrint).mkString(", ")}) => ${returnType.prettyPrint})"
 }
 
 // ===== OOP Nodes =====
@@ -236,7 +291,6 @@ enum Modifier extends PrettyPrintable {
   case PUBLIC
   case PRIVATE
   case PROTECTED
-  case STATIC
   case OVERRIDE
 
   override def prettyPrint: String = this match {
@@ -246,7 +300,6 @@ enum Modifier extends PrettyPrintable {
     case Modifier.PUBLIC => "public"
     case Modifier.PRIVATE => "private"
     case Modifier.PROTECTED => "protected"
-    case Modifier.STATIC => "static"
     case Modifier.OVERRIDE => "override"
   }
 
@@ -261,7 +314,10 @@ enum Modifier extends PrettyPrintable {
   }
 }
 
-case class ModifierNode(modifier: Modifier, range: SourceRange = SourceRange.dummy) extends AstNode {
+case class ModifierNode(
+    modifier: Modifier,
+    range: SourceRange = SourceRange.dummy
+) extends AstNode {
   override def prettyPrint: String = modifier.prettyPrint
 }
 
@@ -271,67 +327,156 @@ sealed trait Decl extends AstNode {
 }
 
 extension (modifiers: List[ModifierNode]) {
-  def prettyPrint: String = if modifiers.isEmpty then "" else s"${modifiers.map(_.prettyPrint).mkString("", " ", " ")}"
+  def prettyPrint: String = if modifiers.isEmpty then ""
+  else s"${modifiers.map(_.prettyPrint).mkString("", " ", " ")}"
 }
 
 extension (typeParameters: List[TypeParameterDecl]) {
   @targetName("typeParameterPrettyPrint")
-  def prettyPrint: String = if typeParameters.nonEmpty then typeParameters.map(_.prettyPrint).mkString("<", ", ", ">")
+  def prettyPrint: String = if typeParameters.nonEmpty then typeParameters.map(_.prettyPrint).mkString("[", ", ", "]")
   else ""
 }
 
-case class TypedefDecl(name: String, 
-                       referredType: TypeRef, 
-                       modifiers: List[ModifierNode] = List.empty,
-                       range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint}typedef $name = ${referredType.prettyPrint};"
+case class TypedefDecl(
+    name: String,
+    typeParameters: List[TypeParameterDecl],
+    referredType: TypeRef,
+    modifiers: List[ModifierNode] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends Decl {
+  override def prettyPrint: String =
+    s"${modifiers.prettyPrint}typedef $name${typeParameters.prettyPrint} = ${referredType.prettyPrint};"
 }
 
-case class VariableDecl(name: String, 
-                        typeRef: TypeRef, 
-                        initExpr: Option[Expr] = None, 
-                        modifiers: List[ModifierNode] = List.empty,
-                        range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint}${typeRef.prettyPrint} $name${
-    initExpr match {
-      case Some(expr) => s" = ${expr.prettyPrint}"
-      case None => ""
-    }};"
+case class VariableDecl(
+    name: String,
+    typeRef: Option[TypeRef],
+    readOnly: Boolean,
+    initExpr: Option[Expr] = None,
+    range: SourceRange = SourceRange.dummy
+) extends Decl,
+      Expr {
+  override def prettyPrint: String =
+    s"${if readOnly then "val" else "var"} $name${typeRef.map(typeRef => s": ${typeRef.prettyPrint}").getOrElse("")}${initExpr.map(expr => s" = ${expr.prettyPrint}").getOrElse("")};"
+
+  def prettyPrintParam: String =
+    s"$name${typeRef.map(typeRef => s": ${typeRef.prettyPrint}").getOrElse("")}"
+
+  override val modifiers: List[ModifierNode] = List.empty
 }
 
-case class TypeParameterDecl(name: String, variance: Variance, range: SourceRange = SourceRange.dummy) extends AstNode {
+case class FieldDecl(
+    name: String,
+    typeRef: Option[TypeRef],
+    readOnly: Boolean,
+    initExpr: Option[Expr] = None,
+    modifiers: List[ModifierNode] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends Decl {
+  override def prettyPrint: String =
+    s"${modifiers.prettyPrint}${
+        if readOnly then "val" else "var"
+      } $name${typeRef.map(typeRef => s": ${typeRef.prettyPrint}").getOrElse("")}${initExpr.map(expr => s" = ${expr.prettyPrint}").getOrElse("")};"
+}
+
+case class TypeParameterDecl(
+    name: String,
+    variance: Variance,
+    upperBounds: List[TypeRef],
+    lowerBounds: List[TypeRef],
+    range: SourceRange = SourceRange.dummy,
+    modifiers: List[ModifierNode] = List.empty
+) extends Decl {
   override def prettyPrint: String = s"${variance.prettyPrint}$name"
 }
 
-case class FunctionDecl(name: String, 
-                        returnType: TypeRef, 
-                        parameters: List[VariableDecl], 
-                        block: BlockStmt, 
-                        modifiers: List[ModifierNode] = List.empty, 
-                        typeParameters: List[TypeParameterDecl] = List.empty,
-                        range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint} ${returnType.prettyPrint} $name${parameters.map(_.prettyPrint.init).mkString("(", ", ", ")")}${block.prettyPrint}"
+case class FunctionDecl(
+    name: String,
+    returnType: TypeRef,
+    parameters: List[VariableDecl],
+    block: BlockExpr,
+    modifiers: List[ModifierNode] = List.empty,
+    typeParameters: List[TypeParameterDecl] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends Decl {
+  override def prettyPrint: String = {
+    val params = parameters.map(_.prettyPrintParam).mkString("(", ", ", ")")
+    s"${modifiers.prettyPrint}def $name${typeParameters.prettyPrint}$params: ${returnType.prettyPrint} ${block.prettyPrint}"
+  }
 }
 
-case class ClassDecl(name: String,
-                     modifiers: List[ModifierNode] = List.empty,
-                     superClasses: List[TypeRef] = List.empty,
-                     fields: List[VariableDecl] = List.empty,
-                     methods: List[FunctionDecl] = List.empty,
-                     nestedClasses: List[ClassDecl] = List.empty,
-                     typeParameters: List[TypeParameterDecl] = List.empty, 
-                     range: SourceRange = SourceRange.dummy) extends Decl {
-  override def prettyPrint: String = s"${modifiers.prettyPrint}class${typeParameters.prettyPrint} $name${
-    if superClasses.isEmpty then ""
-    else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
-  } {\n${fields.map(_.prettyPrint).mkString("\n")}\n${methods.map(_.prettyPrint).mkString("\n")}\n${nestedClasses.map(_.prettyPrint).mkString("\n")}\n}"
+sealed trait ClassLikeDecl(
+    val name: String,
+    val modifiers: List[ModifierNode] = List.empty,
+    val superClasses: List[TypeRef] = List.empty,
+    val fields: List[FieldDecl] = List.empty,
+    val methods: List[FunctionDecl] = List.empty,
+    val nestedClasses: List[ClassDecl] = List.empty,
+    val nestedObjects: List[ObjectDecl] = List.empty,
+    val range: SourceRange = SourceRange.dummy
+) extends Decl
+
+case class ClassDecl(
+    override val name: String,
+    override val modifiers: List[ModifierNode] = List.empty,
+    override val superClasses: List[TypeRef] = List.empty,
+    override val fields: List[FieldDecl] = List.empty,
+    override val methods: List[FunctionDecl] = List.empty,
+    override val nestedClasses: List[ClassDecl] = List.empty,
+    override val nestedObjects: List[ObjectDecl] = List.empty,
+    typeParameters: List[TypeParameterDecl] = List.empty,
+    override val range: SourceRange = SourceRange.dummy
+) extends ClassLikeDecl(name, modifiers, superClasses, fields, methods, nestedClasses, nestedObjects, range) {
+  override def prettyPrint: String = {
+    s"${modifiers.prettyPrint}class $name${typeParameters.prettyPrint}${
+        if superClasses.isEmpty then ""
+        else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
+      } {\n${fields.map(_.prettyPrint).mkString("\n")}${
+        if fields.isEmpty then "" else "\n"
+      }${methods.map(_.prettyPrint).mkString("\n")}${
+        if methods.isEmpty then "" else "\n"
+      }${nestedClasses.map(_.prettyPrint).mkString("\n")}${
+        if nestedClasses.isEmpty then "" else "\n"
+      }${nestedObjects.map(_.prettyPrint).mkString("\n")}${if nestedObjects.isEmpty then "" else "\n"}}"
+  }
+
+  def getApplyMethods: List[FunctionDecl] = methods.filter(_.name == "apply")
 }
 
-case class KahwaFile(typedefDecls: List[TypedefDecl] = List.empty,
-                     classDecls: List[ClassDecl] = List.empty,
-                     functionDecls: List[FunctionDecl] = List.empty,
-                     variableDecls: List[VariableDecl] = List.empty, 
-                     range: SourceRange = SourceRange.dummy) extends AstNode {
-  override def prettyPrint: String
-  = s"${typedefDecls.map(_.prettyPrint).mkString("\n")}${classDecls.map(_.prettyPrint).mkString("\n")}${functionDecls.map(_.prettyPrint).mkString("\n")}${variableDecls.map(_.prettyPrint).mkString("\n")}"
+case class ObjectDecl(
+    override val name: String,
+    override val modifiers: List[ModifierNode] = List.empty,
+    override val superClasses: List[TypeRef] = List.empty,
+    override val fields: List[FieldDecl] = List.empty,
+    override val methods: List[FunctionDecl] = List.empty,
+    override val nestedClasses: List[ClassDecl] = List.empty,
+    override val nestedObjects: List[ObjectDecl] = List.empty,
+    override val range: SourceRange = SourceRange.dummy
+) extends ClassLikeDecl(name, modifiers, superClasses, fields, methods, nestedClasses, nestedObjects, range) {
+  override def prettyPrint: String =
+    s"${modifiers.prettyPrint}object $name${
+        if superClasses.isEmpty then ""
+        else s": ${superClasses.map(_.prettyPrint).mkString(", ")}"
+      } {\n${fields.map(_.prettyPrint).mkString("\n")}${
+        if fields.isEmpty then "" else "\n"
+      }${methods.map(_.prettyPrint).mkString("\n")}${
+        if methods.isEmpty then "" else "\n"
+      }${nestedClasses.map(_.prettyPrint).mkString("\n")}${
+        if nestedClasses.isEmpty then "" else "\n"
+      }${nestedObjects.map(_.prettyPrint).mkString("\n")}${if nestedObjects.isEmpty then "" else "\n"}}"
+}
+
+case class KahwaFile(
+    typedefDecls: List[TypedefDecl] = List.empty,
+    classDecls: List[ClassDecl] = List.empty,
+    objectDecls: List[ObjectDecl] = List.empty,
+    functionDecls: List[FunctionDecl] = List.empty,
+    variableDecls: List[FieldDecl] = List.empty,
+    range: SourceRange = SourceRange.dummy
+) extends Decl {
+  override def prettyPrint: String =
+    s"${typedefDecls.map(_.prettyPrint).mkString("\n")}\n${classDecls.map(_.prettyPrint).mkString("\n")}\n${objectDecls.map(_.prettyPrint).mkString("\n")}\n${functionDecls.map(_.prettyPrint).mkString("\n")}\n${variableDecls.map(_.prettyPrint).mkString("\n")}"
+
+  override val name: String = "dummy"
+  override val modifiers: List[ModifierNode] = List.empty
 }

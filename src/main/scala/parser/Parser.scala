@@ -6,16 +6,20 @@ import diagnostics.Diagnostic.*
 import sources.SourceRange
 
 import scala.language.postfixOps
-import parser.Parsel.*
-import parser.Token.{Class, Identifier, Private, RightCurlyBrace, SemiColon, Typedef}
-import parser.Parsel.list
+import parser.Parsel.{list, optional, *}
+import parser.Token.{Class, Identifier, Private, RightCurlyBrace, SemiColon, SubtypeOp, SupertypeOp, Typedef}
+import symbols.analyser.AccessCompressor
+import symbols.analyser.SemanticAnalyser
 
 object Parser {
   type ParserFunc[A] = ParserFunction[A, Token, Diagnostic]
   private type SafePointFunc = SafePointFunction[Token]
+  
+  given SafePointFunc = tok => false
 
   val isSafePointForFile: SafePointFunc = {
-    case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) => true
+    case Token.Identifier(_, _) | Token.Typedef(_) | Token.Class(_) | Token.Interface(_) =>
+      true
     case t if t.isModifier => true
     case _ => false
   }
@@ -30,7 +34,7 @@ object Parser {
   val skipNothing: SafePointFunc = _ => true
 
   val isSafePointForStmt: SafePointFunc = {
-    case Token.Static(_) | Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
+    case Token.RightCurlyBrace(_) | Token.SemiColon(_) => true
     case _ => false
   }
 
@@ -39,63 +43,132 @@ object Parser {
     case _ => false
   }
 
-  private def parseToken[A](tokenMatch: Token => Option[A], notMatchError: Token => Diagnostic, endOfFileError: SourceRange => Diagnostic): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
+  private def parseToken[A](
+      tokenMatch: Token => Option[A],
+      notMatchError: Token => Diagnostic,
+      endOfFileError: SourceRange => Diagnostic
+  ): Parsel[A, Token, Diagnostic] = Parsel((input: Parsel.Input[Token]) =>
     input.current match {
-      case Some(token) => val matched = tokenMatch(token)
+      case Some(token) =>
+        val matched = tokenMatch(token)
         matched match {
           case Some(value: A) => (matched, input.advance, Iterable.empty)
           case None => (None, input, List(notMatchError(token)))
         }
-      case None => (None, input, List(endOfFileError(input.last match {
-        case Some(token) => token.range
-        case None => SourceRange.dummy
-      })))
-    })
-  
-  private def parseTok[A](expected: String)(check: PartialFunction[Token, A]): Parsel[A, Token, Diagnostic] =
+      case None =>
+        (
+          None,
+          input,
+          List(endOfFileError(input.last match {
+            case Some(token) => token.range
+            case None => SourceRange.dummy
+          }))
+        )
+    }
+  )
+
+  private def parseTok[A](
+      expected: String
+  )(check: PartialFunction[Token, A]): Parsel[A, Token, Diagnostic] =
     parseToken(
       check.lift,
       token => ExpectedSomething(expected, token.prettyPrint, token.range),
       range => ExpectedSomething(expected, "EOF", range)
     )
 
-  private val parseModifierNode: Parsel[ModifierNode, Token, Diagnostic] = parseToken(token =>
-    if (token.isModifier) {
-      Some(ModifierNode(token match {
-        case Token.Static(_) => Modifier.STATIC
-        case Token.Public(_) => Modifier.PUBLIC
-        case Token.Private(_) => Modifier.PRIVATE
-        case Token.Protected(_) => Modifier.PROTECTED
-        case Token.Open(_) => Modifier.OPEN
-        case Token.Final(_) => Modifier.FINAL
-        case Token.Abstract(_) => Modifier.ABSTRACT
-        case _ => throw IllegalStateException("Unreachable in parseModifierNode()")
-      }, token.range))
-    } else {
-      None
-    }, token => ExpectedSomething("modifier", token.prettyPrint, token.range), range => ExpectedSomething("modifier", "EOF", range))
+  private val parseModifierNode: Parsel[ModifierNode, Token, Diagnostic] =
+    parseToken(
+      token =>
+        if (token.isModifier) {
+          Some(
+            ModifierNode(
+              token match {
+                case Token.Public(_) => Modifier.PUBLIC
+                case Token.Private(_) => Modifier.PRIVATE
+                case Token.Protected(_) => Modifier.PROTECTED
+                case Token.Open(_) => Modifier.OPEN
+                case Token.Final(_) => Modifier.FINAL
+                case Token.Abstract(_) => Modifier.ABSTRACT
+                case Token.Override(_) => Modifier.OVERRIDE
+                case _ =>
+                  throw IllegalStateException(
+                    "Unreachable in parseModifierNode()"
+                  )
+              },
+              token.range
+            )
+          )
+        } else {
+          None
+        },
+      token => ExpectedSomething("modifier", token.prettyPrint, token.range),
+      range => ExpectedSomething("modifier", "EOF", range)
+    )
 
   lazy val parseTypeRef: SafePointFunc ?=> Parsel[TypeRef, Token, Diagnostic] = {
-    spanned(parseIdentifier ~ optional(parseLeftBracket ~> sepBy(parseVariance ~ delay(parseTypeRef), parseComma) <~ parseRightBracket)).map { tuple =>
-      val ((ident, optionalArgs), range) = tuple
-      optionalArgs match {
-        case Some(args) => TypeRef(Unqual(ident.value), args.map(_.swap), range)
-        case None => TypeRef(Unqual(ident.value), List.empty, range)
+    spanned(
+      or(
+        parseIdentifier ~ optional(
+          parseDot ~> sepBy(parseIdentifier, parseDot)
+        ) ~ optional(
+          parseLeftBracket ~> sepBy(delay(parseTypeRef), parseComma) <~ parseRightBracket
+        ),
+        (parseLeftParen ~> sepBy(delay(parseTypeRef), parseComma) <~ parseRightParen) ~ (parseArrow ~> delay(
+          parseTypeRef
+        )),
+        parseLeftParen ~> delay(parseTypeRef) <~ parseRightParen,
+        parseLeftParen ~> sepBy(delay(parseTypeRef), parseComma) <~ parseRightParen,
+      )
+    ).map { tuple =>
+      tuple match {
+        case (
+            ((head: Identifier, optionalTail: Option[List[Identifier]]), optionalArgs: Option[List[TypeRef]]),
+            range: SourceRange
+          ) => AtomType(
+            Ident(
+              head.value,
+              optionalTail.getOrElse(List.empty).map(_.value),
+              (if (optionalTail.toList.flatten.isEmpty) head.range
+               else optionalTail.toList.flatten.last.range) <-> head.range
+            ),
+            optionalArgs.getOrElse(List.empty),
+            range
+          )
+        case ((paramList: List[TypeRef], returnType: TypeRef), range: SourceRange) =>
+          FunctionType(paramList, returnType, range)
+        case (elems: List[TypeRef], range: SourceRange) => TupleType(elems, range)
+        case (typeRef: TypeRef, _) => typeRef
       }
     }
   }
 
   lazy val parseTypedefDecl: SafePointFunc ?=> Parsel[TypedefDecl, Token, Diagnostic] = {
-    spanned((list(parseModifierNode) <~ parseTypedef) ~ commit((parseIdentifier <~ parseEquals) ~ parseTypeRef <~ parseSemiColon)).map { case ((modifierNodes, (identifier, typeRef)), range: SourceRange) =>
-      TypedefDecl(identifier.value, typeRef, modifierNodes, range)
+    spanned(
+      (list(parseModifierNode) <~ parseTypedef) ~ commit(
+        parseIdentifier ~ (optional(
+          parseGenericArguments
+        ) <~ parseEquals) ~ parseTypeRef <~ parseSemiColon
+      )
+    ).map { tuple =>
+      val (
+        (modifierNodes, ((identifier, optionalGenericArgs), typeRef)),
+        range
+      ) = tuple
+      TypedefDecl(
+        identifier.value,
+        optionalGenericArgs.getOrElse(List.empty),
+        typeRef,
+        modifierNodes,
+        range
+      )
     }
   }
 
   lazy val parseVariance: SafePointFunc ?=> Parsel[Variance, Token, Diagnostic] = {
-    optional(or(parseOut, parseIn)).map {
+    optional(or(parsePlus, parseMinus)).map {
       case None => Variance.INVARIANT
-      case Some(_: Token.Out) => Variance.COVARIANT
-      case Some(_: Token.In) => Variance.CONTRAVARIANT
+      case Some(_: Token.Plus) => Variance.COVARIANT
+      case Some(_: Token.Minus) => Variance.CONTRAVARIANT
     }
   }
 
@@ -103,18 +176,52 @@ object Parser {
     or(
       parseTrue.map(tok => BoolLiteral(true, tok.range)),
       parseFalse.map(tok => BoolLiteral(false, tok.range)),
-      parseNull.map(tok => NullLiteral(tok.range)),
       parseFloat.map(tok => FloatLiteral(tok.value, tok.range)),
       parseInteger.map(tok => IntegerLiteral(tok.value, tok.range)),
       parseStringLiteral.map(tok => StringLiteral(tok.value, tok.range)),
-      parseIdentifier.map(tok => Unqual(tok.value, tok.range))
+      parseCharLiteral.map(tok => CharLiteral(tok.value, tok.range)),
+      parseIdentifier.map(tok => ExprIdent(tok.value, List.empty, tok.range)),
+      parseContinue.map(tok => ContinueExpr(tok.range)),
+      parseBreak.map(tok => BreakExpr(tok.range))
     )
+  }
+
+  lazy val parseIfExpr: SafePointFunc ?=> Parsel[IfExpr, Token, Diagnostic] = {
+    spanned(
+      (parseIf ~> parseLeftParen ~> delay(parseExpr) <~ parseRightParen) ~
+        parseBlock ~
+        optional(parseElse ~> parseBlock)
+    ).map { case (((cond, ifBlock), optElseBlock), range) =>
+      IfExpr(cond, ifBlock, optElseBlock, range)
+    }
+  }
+
+  lazy val parseWhileExpr: SafePointFunc ?=> Parsel[WhileExpr, Token, Diagnostic] = {
+    spanned(
+      (parseWhile ~> parseLeftParen ~> delay(parseExpr) <~ parseRightParen) ~ parseBlock
+    ).map { case ((cond, body), range) =>
+      WhileExpr(cond, body, range)
+    }
   }
 
   lazy val parseExpr: SafePointFunc ?=> Parsel[Expr, Token, Diagnostic] = {
     precedence[Expr, Token, Diagnostic](
       atomExpr,
-      parseLeftParen ~> delay(parseExpr) <~ parseRightParen
+      parseLeftParen ~> delay(parseExpr) <~ parseRightParen,
+      parseBlock,
+      parseIfExpr,
+      parseWhileExpr,
+      parseVariableDecl,
+      spanned(
+        (parseLeftParen ~> sepBy(parseParameter, parseComma) <~ parseRightParen <~ parseArrow) ~ delay(parseExpr)
+      ).map { tuple =>
+        val ((paramList, body), range) = tuple
+        LambdaExpr(paramList, body, range)
+      },
+      spanned(parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map { tuple =>
+        val (elements, range) = tuple
+        TupleExpr(elements, range)
+      }
     )(
       Ops(InfixR)(
         parseEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.EQUALS, l.range <-> r.range)),
@@ -123,11 +230,21 @@ object Parser {
         parseStarEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.STAR_EQUALS, l.range <-> r.range)),
         parseSlashEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.SLASH_EQUALS, l.range <-> r.range)),
         parseModuloEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.MODULO_EQUALS, l.range <-> r.range)),
-        parseLeftShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT_EQUALS, l.range <-> r.range)),
-        parseRightShiftEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT_EQUALS, l.range <-> r.range)),
-        parseBitwiseAndEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND_EQUALS, l.range <-> r.range)),
-        parseBitwiseOrEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR_EQUALS, l.range <-> r.range)),
-        parseBitwiseXorEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR_EQUALS, l.range <-> r.range))
+        parseLeftShiftEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LEFT_SHIFT_EQUALS, l.range <-> r.range)
+        ),
+        parseRightShiftEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.RIGHT_SHIFT_EQUALS, l.range <-> r.range)
+        ),
+        parseBitwiseAndEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_AND_EQUALS, l.range <-> r.range)
+        ),
+        parseBitwiseOrEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_OR_EQUALS, l.range <-> r.range)
+        ),
+        parseBitwiseXorEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.BITWISE_XOR_EQUALS, l.range <-> r.range)
+        )
       ),
       Ops(InfixL)(
         parseLogicalOr.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LOGICAL_OR, l.range <-> r.range))
@@ -150,7 +267,9 @@ object Parser {
       ),
       Ops(InfixL)(
         parseLessEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS_EQUALS, l.range <-> r.range)),
-        parseGreaterEquals.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER_EQUALS, l.range <-> r.range)),
+        parseGreaterEquals.map(_ =>
+          (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER_EQUALS, l.range <-> r.range)
+        ),
         parseLess.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.LESS, l.range <-> r.range)),
         parseGreater.map(_ => (l: Expr, r: Expr) => BinaryExpr(l, r, BinaryOp.GREATER, l.range <-> r.range))
       ),
@@ -177,123 +296,221 @@ object Parser {
       Ops(Postfix)(
         parseIncrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.POST_INCREMENT, tok.range <-> e.range)),
         parseDecrement.map(tok => (e: Expr) => UnaryExpr(e, UnaryOp.POST_DECREMENT, tok.range <-> e.range)),
-        spanned(parseLeftBracket ~> delay(parseExpr) <~ parseRightBracket).map(tuple =>
-          val (arg, range) = tuple
-          (e: Expr) => IndexExpr(e, arg, e.range <-> range)),
-        spanned(parseLeftParen ~> sepBy(delay(parseExpr), parseComma) <~ parseRightParen).map(tuple =>
+        spanned(
+          parseLeftParen ~> sepBy(
+            delay(parseExpr),
+            parseComma
+          ) <~ parseRightParen
+        ).map(tuple =>
           val (args, range) = tuple
-          (e: Expr) => CallExpr(e, args, e.range <-> range))
+          (e: Expr) => CallExpr(e, args, e.range <-> range)
+        )
       ),
       Ops(Postfix)(
-        (parseDot ~> parseIdentifier).map(ident => (e: Expr) => MemberAccessExpr(e, Unqual(ident.value), e.range <-> ident.range))
+        (parseDot ~> parseIdentifier).map(ident =>
+          (e: Expr) => MemberAccessExpr(e, ExprIdent(ident.value, List.empty, ident.range), e.range <-> ident.range)
+        )
       )
     )
   }
 
-  lazy val parseBlock: SafePointFunc ?=> Parsel[BlockStmt, Token, Diagnostic] = {
-    given SafePointFunc = isSafePointForBlock
-    spanned(parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace).map(tuple =>
-      val (stmts, range) = tuple
-      BlockStmt(stmts, range)
+  lazy val parseStmt: SafePointFunc ?=> Parsel[Expr, Token, Diagnostic] = {
+    or(
+      delay(parseBlock),
+      parseExpr <~ parseSemiColon
     )
   }
 
-  lazy val parseStmt: SafePointFunc ?=> Parsel[Stmt, Token, Diagnostic] = {
-    or(
-      (parseBreak <~ parseSemiColon).map(tok => BreakStmt(tok.range)),
-      (parseContinue <~ parseSemiColon).map(tok => ContinueStmt(tok.range)),
-      (parseExpr <~ parseSemiColon).map(expr => ExprStmt(expr, expr.range)),
-      parseBlock,
-      spanned((parseIf ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock ~ optional(parseElse ~> parseBlock)).map(tuple =>
-        val (((expr, ifBlock), optionalElseBlock), range) = tuple
-        IfStmt(expr, ifBlock, optionalElseBlock, range)
-      ),
-      spanned(parseReturn ~> parseExpr <~ parseSemiColon).map(tuple =>
-        val (expr, range) = tuple
-        ReturnStmt(expr, range)
-      ),
-      spanned((parseWhile ~> parseLeftParen ~> parseExpr <~ parseRightParen) ~ parseBlock).map(tuple =>
-        val ((expr, blockStmt), range) = tuple
-        WhileStmt(expr, blockStmt, range)),
-      spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ (optional(parseEquals ~> parseExpr) <~ parseSemiColon)).map(tuple => {
-        val ((((modifierNodes, varType), identifier), optionalExpr), range) = tuple
-        VariableDeclStmt(VariableDecl(identifier.value, varType, optionalExpr, modifierNodes, range))
-      })
+  lazy val parseBlock: SafePointFunc ?=> Parsel[BlockExpr, Token, Diagnostic] = {
+    given SafePointFunc = isSafePointForBlock
+    spanned(
+      parseLeftCurlyBrace ~> list(delay(parseStmt)) <~ parseRightCurlyBrace
+    ).map(tuple =>
+      val (stmts, range) = tuple
+      BlockExpr(stmts, range)
     )
+  }
+
+  lazy val parseGenericArgument: SafePointFunc ?=> Parsel[TypeParameterDecl, Token, Diagnostic] = {
+    spanned(
+      parseVariance ~ parseIdentifier ~ optional(
+        or(
+          parseSubtypeOp ~ sepBy(parseTypeRef, parseComma),
+          parseSupertypeOp ~ sepBy(parseTypeRef, parseComma),
+          (parseSubtypeOp ~ sepBy(parseTypeRef, parseComma)) ~ (parseSupertypeOp ~> sepBy(parseTypeRef, parseComma)),
+          (parseSupertypeOp ~ sepBy(parseTypeRef, parseComma)) ~ (parseSubtypeOp ~> sepBy(parseTypeRef, parseComma))
+        )
+      )
+    ).map(tuple => {
+      val (((variance, ident), optionalConstraints), range) = tuple
+      val (upperBounds, lowerBounds) = optionalConstraints.map {
+        case (SubtypeOp(_), typeRefs: List[TypeRef]) => (typeRefs, List.empty)
+        case (SupertypeOp(_), typeRefs: List[TypeRef]) => (List.empty, typeRefs)
+        case ((SubtypeOp(_), upBounds: List[TypeRef]), lowBounds: List[TypeRef]) => (upBounds, lowBounds)
+        case ((SupertypeOp(_), lowBounds: List[TypeRef]), upBounds: List[TypeRef]) => (upBounds, lowBounds)
+      }.getOrElse((List.empty, List.empty))
+      TypeParameterDecl(ident.value, variance, upperBounds, lowerBounds, range)
+    })
   }
 
   lazy val parseGenericArguments: SafePointFunc ?=> Parsel[List[TypeParameterDecl], Token, Diagnostic] = {
-    (parseLeftBracket ~> sepBy(parseVariance ~ parseIdentifier, parseComma) <~ parseRightBracket).map(genericArgs => {
-      genericArgs.map((variance, identifier) => TypeParameterDecl(identifier.value, variance))
-    })
+    parseLeftBracket ~> sepBy(parseGenericArgument, parseComma) <~ parseRightBracket
   }
 
   lazy val parseFunctionDecl: SafePointFunc ?=> Parsel[FunctionDecl, Token, Diagnostic] = {
-    spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
-      (parseLeftParen ~> sepBy(parseVariableDecl, parseComma) <~ parseRightParen) ~ parseBlock).map(tuple => {
-      val (((((modifiers, returnType), identifier), parameters), body), range) = tuple
-      FunctionDecl(identifier.value, returnType, parameters, body, modifiers, List.empty, range)
+    spanned(
+      list(parseModifierNode) ~ (parseDef ~> parseIdentifier) ~ optional(parseGenericArguments) ~
+        (parseLeftParen ~> sepBy(
+          parseParameter,
+          parseComma
+        ) <~ parseRightParen) ~ (parseColon ~> parseTypeRef) ~ parseBlock
+    ).map(tuple => {
+      val ((((((modifiers, identifier), optionalGenericArgs), parameters), returnType), body), range) = tuple
+      FunctionDecl(
+        identifier.value,
+        returnType,
+        parameters,
+        body,
+        modifiers,
+        optionalGenericArgs.getOrElse(List.empty),
+        range
+      )
     })
+  }
+
+  lazy val parseParameter: SafePointFunc ?=> Parsel[VariableDecl, Token, Diagnostic] = {
+    spanned(parseIdentifier ~ (parseColon ~> parseTypeRef) ~ optional(parseEquals ~> delay(parseExpr))).map { tuple =>
+      val (((identifier, typeRef), defaultExpr), range) = tuple
+      VariableDecl(
+        identifier.value,
+        Some(typeRef),
+        false,
+        defaultExpr,
+        range
+      )
+    }
   }
 
   lazy val parseVariableDecl: SafePointFunc ?=> Parsel[VariableDecl, Token, Diagnostic] = {
-    spanned(list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ optional(parseEquals ~> parseExpr)).map(tuple => {
-      val ((((modifierNodes, varType), identifier), optionalExpr), range) = tuple
-      VariableDecl(identifier.value, varType, optionalExpr, modifierNodes, range)
+    spanned(
+      or(parseVal, parseVar) ~ parseIdentifier ~ optional(
+        parseColon ~> parseTypeRef
+      ) ~ optional(
+        parseEquals ~> delay(parseExpr)
+      )
+    ).map { tuple =>
+      val ((((valOrVar, identifier), optionalType), optionalExpr), range) = tuple
+      VariableDecl(
+        identifier.value,
+        optionalType,
+        valOrVar match {
+          case Token.Val(_) => true
+          case _ => false
+        },
+        optionalExpr,
+        range
+      )
+    }
+  }
+
+  lazy val parseFieldDecl: SafePointFunc ?=> Parsel[FieldDecl, Token, Diagnostic] = {
+    spanned(
+      list(parseModifierNode) ~ or(parseVal, parseVar) ~ parseIdentifier ~ optional(
+        parseColon ~> parseTypeRef
+      ) ~ optional(
+        parseEquals ~> parseExpr
+      )
+    ).map(tuple => {
+      val (((((modifierNodes, valOrVar), identifier), optionalType), optionalExpr), range) = tuple
+      FieldDecl(
+        identifier.value,
+        optionalType,
+        valOrVar match {
+          case Token.Val(_) => true
+          case _ => false
+        },
+        optionalExpr,
+        modifierNodes,
+        range
+      )
     })
   }
 
+  lazy val parseObjectDecl: SafePointFunc ?=> Parsel[ObjectDecl, Token, Diagnostic] =
+    spanned(
+      (list(parseModifierNode) <~ parseObjectTok) ~ parseIdentifier ~
+        optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
+        (parseLeftCurlyBrace ~> list(
+          or(
+            delay(parseClassDecl),
+            parseFunctionDecl,
+            parseFieldDecl <~ parseSemiColon,
+            delay(parseObjectDecl)
+          )
+        ) <~ parseRightCurlyBrace)
+    ).map { tuple =>
+      val ((((modifierNodes, identifier), optionalSuperClasses), objectMembers), range) = tuple
+      ObjectDecl(
+        identifier.value,
+        modifierNodes,
+        optionalSuperClasses.getOrElse(Nil),
+        objectMembers.collect { case decl: FieldDecl => decl },
+        objectMembers.collect { case decl: FunctionDecl => decl },
+        objectMembers.collect { case decl: ClassDecl => decl },
+        objectMembers.collect { case decl: ObjectDecl => decl },
+        range
+      )
+    }
+
   lazy val parseClassDecl: SafePointFunc ?=> Parsel[ClassDecl, Token, Diagnostic] = {
-    spanned((list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
-      optional(parseGenericArguments) ~
-      optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
-      (parseLeftCurlyBrace ~> list(or(delay(parseClassDecl), parseFunctionDecl, parseVariableDecl <~ parseSemiColon)) <~ parseRightCurlyBrace)).map(tuple => {
+    spanned(
+      (list(parseModifierNode) <~ parseClass) ~ parseIdentifier ~
+        optional(parseGenericArguments) ~
+        optional(parseColon ~> sepBy(parseTypeRef, parseComma)) ~
+        (parseLeftCurlyBrace ~> list(
+          or(
+            delay(parseClassDecl),
+            parseFunctionDecl,
+            parseFieldDecl <~ parseSemiColon,
+            delay(parseObjectDecl)
+          )
+        ) <~ parseRightCurlyBrace)
+    ).map(tuple => {
       val (((((modifierNodes, identifier), optionalTypeParameters), optionalSuperClasses), classMembers), range) = tuple
       ClassDecl(
         identifier.value,
         modifierNodes,
         optionalSuperClasses.getOrElse(Nil),
-        classMembers.collect { case decl: VariableDecl => decl },
+        classMembers.collect { case decl: FieldDecl => decl },
         classMembers.collect { case decl: FunctionDecl => decl },
         classMembers.collect { case decl: ClassDecl => decl },
+        classMembers.collect { case decl: ObjectDecl => decl },
         optionalTypeParameters.getOrElse(Nil),
-        range)
+        range
+      )
     })
   }
 
   lazy val parseKahwaFile: SafePointFunc ?=> Parsel[KahwaFile, Token, Diagnostic] = {
-    fully(or(
-      (input: Input[Token]) => {
-        (list(parseModifierNode) <~ parseTypedef)(input)._1 match {
-          case Some(_) => Some(2)
-          case None => {
-            (list(parseModifierNode) <~ parseClass)(input)._1 match {
-              case Some(_) => Some(0)
-              case None => {
-                (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~
-                  parseLeftParen)(input)._1 match {
-                  case Some(_) => Some(1)
-                  case None => {
-                    (list(parseModifierNode) ~ parseTypeRef ~ parseIdentifier ~ or(parseSemiColon, parseEquals))(input)._1 match {
-                      case Some(_) => Some(3)
-                      case None => Some(-1)
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      (0 -> parseClassDecl, 1 -> parseFunctionDecl, 2 -> parseTypedefDecl, 3 -> (parseVariableDecl <~ parseSemiColon)),
-      _ => Iterable[Diagnostic]().empty
-    )).map(fileMembers => {
+    spanned(
+      fully(
+        or(
+          parseTypedef,
+          parseClassDecl,
+          parseObjectDecl,
+          parseFunctionDecl,
+          parseFieldDecl <~ parseSemiColon
+        )
+      )
+    ).map(tuple => {
+      val (fileMembers, range) = tuple
       KahwaFile(
         fileMembers.collect { case decl: TypedefDecl => decl },
         fileMembers.collect { case decl: ClassDecl => decl },
+        fileMembers.collect { case decl: ObjectDecl => decl },
         fileMembers.collect { case decl: FunctionDecl => decl },
-        fileMembers.collect { case decl: VariableDecl => decl },
-        SourceRange.dummy // TODO
+        fileMembers.collect { case decl: FieldDecl => decl },
+        range
       )
     })
   }
@@ -343,9 +560,13 @@ object Parser {
   private val parseRightShift = parseTok(">>") { case tok: Token.RightShift => tok }
   private val parseQuestion = parseTok("?") { case tok: Token.Question => tok }
   private val parseDot = parseTok(".") { case tok: Token.Dot => tok }
+  private val parseArrow = parseTok("=>") { case tok: Token.Arrow => tok }
+  private val parseSubtypeOp = parseTok("<:") { case tok: Token.SubtypeOp => tok }
+  private val parseSupertypeOp = parseTok(">:") { case tok: Token.SupertypeOp => tok }
+  private val parseVal = parseTok("val") { case tok: Token.Val => tok }
+  private val parseVar = parseTok("var") { case tok: Token.Var => tok }
 
   private val parseClass = parseTok("class") { case tok: Token.Class => tok }
-  private val parseStatic = parseTok("static") { case tok: Token.Static => tok }
   private val parsePublic = parseTok("public") { case tok: Token.Public => tok }
   private val parsePrivate = parseTok("private") { case tok: Token.Private => tok }
   private val parseProtected = parseTok("protected") { case tok: Token.Protected => tok }
@@ -354,9 +575,9 @@ object Parser {
   private val parseAbstract = parseTok("abstract") { case tok: Token.Abstract => tok }
   private val parseInterface = parseTok("interface") { case tok: Token.Interface => tok }
   private val parseTypedef = parseTok("typedef") { case tok: Token.Typedef => tok }
-  private val parseIn = parseTok("in") { case tok: Token.In => tok }
-  private val parseOut = parseTok("out") { case tok: Token.Out => tok }
   private val parseOverride = parseTok("override") { case tok: Token.Override => tok }
+  private val parseObjectTok = parseTok("object") { case tok: Token.ObjectTok => tok }
+  private val parseDef = parseTok("def") { case tok: Token.Def => tok }
 
   private val parseReturn = parseTok("return") { case tok: Token.Return => tok }
   private val parseIf = parseTok("if") { case tok: Token.If => tok }
@@ -368,7 +589,6 @@ object Parser {
 
   private val parseTrue = parseTok("true") { case tok: Token.True => tok }
   private val parseFalse = parseTok("false") { case tok: Token.False => tok }
-  private val parseNull = parseTok("null") { case tok: Token.NullLiteral => tok }
 
   private val parseIdentifier = parseTok("identifier") { case tok: Token.Identifier => tok }
   private val parseStringLiteral = parseTok("string literal") { case tok: Token.StringLiteral => tok }
@@ -376,7 +596,9 @@ object Parser {
   private val parseInteger = parseTok("integer") { case tok: Token.IntegerLiteral => tok }
   private val parseFloat = parseTok("float") { case tok: Token.FloatLiteral => tok }
 
-  private def spanned[A, T, Error](parser: Parsel[A, T, Error]): Parsel[(A, SourceRange), T, Error] = {
+  private def spanned[A, T, Error](
+      parser: Parsel[A, T, Error]
+  ): Parsel[(A, SourceRange), T, Error] = {
     Parsel((input: Input[T]) => {
       val (res, next, errs) = parser(input)
       res match {
