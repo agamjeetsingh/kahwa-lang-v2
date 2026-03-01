@@ -16,15 +16,15 @@ A work-in-progress language specification lives in [`spec/`](spec/).
 
 ```
 class Stack[+T] {
-  def push(item: T): Unit { ... }
-  def pop(): T { ... }
+  def push(item: T): Unit { /* ... */ }
+  def pop(): T { /* ... */ }
 }
 
 def factorial(n: Int): Int {
-  if (n <= 1) { 1 } else { n * factorial(n - 1) }
+  if (n <= 1) { 1; } else { n * factorial(n - 1); };
 }
 
-val double: (Int) => Int = (x: Int) => x * 2
+val double: (Int) => Int = (x: Int) => x * 2;
 ```
 
 Key features:
