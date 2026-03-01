@@ -185,7 +185,7 @@ case class MemberAccessExpr(
 case class BlockExpr(exprs: List[Expr], range: SourceRange = SourceRange.dummy) extends Expr {
   override def prettyPrint: String = {
     def needsSemicolon(e: Expr) = e match {
-      case _: BlockExpr | _: IfExpr | _: WhileExpr => false
+      case _: BlockExpr | _: IfExpr | _: WhileExpr | _: VariableDecl => false
       case _ => true
     }
     exprs
@@ -399,8 +399,10 @@ case class FunctionDecl(
     typeParameters: List[TypeParameterDecl] = List.empty,
     range: SourceRange = SourceRange.dummy
 ) extends Decl {
-  override def prettyPrint: String =
-    s"${modifiers.prettyPrint}def $name${parameters.map(_.prettyPrintParam).mkString("(", ", ", ")}")}: ${returnType.prettyPrint} ${block.prettyPrint}"
+  override def prettyPrint: String = {
+    val params = parameters.map(_.prettyPrintParam).mkString("(", ", ", ")")
+    s"${modifiers.prettyPrint}def $name${typeParameters.prettyPrint}$params: ${returnType.prettyPrint} ${block.prettyPrint}"
+  }
 }
 
 sealed trait ClassLikeDecl(
