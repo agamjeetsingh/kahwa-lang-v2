@@ -49,6 +49,14 @@ In general, anything that can contain a Declaration is a scope.
 | **Generic Type Params**        |       |     ✓     |    ✓    |             |    ✓    |         |     ✓      |     ✓     |
 
 
+## Name Spaces
+
+Any language construct that can contain publicly visible declarations is a name space. A comprehensive list:
+1. Packages
+2. Classes
+3. Objects
+4. Interfaces
+
 ## Parent/Outer Scopes
 
 Every scope has a (possibly empty) list of outer scopes.
@@ -57,8 +65,38 @@ TODO
 
 ## Look up within a function/method body
 
-Define the **DIRECTLY ENCLOSING CLASS** as the class that directly encloses the function we are performing look up in.
+Define the **DIRECTLY ENCLOSING CLASS** as the class/interface/object that directly encloses the function we are performing look up in.
 
-### Looking up a term
+### Restrictions
+
+Whenever we are looking up the meaning of a name, certain kinds of restrictions apply to that search.
+
+#### Name Space
+
+During a chain name lookup like `foo.bar` it might have been concluded that `foo` is a namespace.
+Then `bar`'s search is restricted to be inside this particular namespace.
+
+#### Location of Search (Visibility)
+
+All terms (including private ones) from the **DIRECTLY ENCLOSING CLASS**'s corresponding object or class/interface are visible.
+For example, in a lookup in `class A`, `foo` from `object A { foo = ... }` is visible.
+
+Additionally, protected and public members of the super classes of the **DIRECTLY ENCLOSING CLASS** are also visible.
+
+#### Function Context
+
+If the name being looked up is used in a function context, like `foo()`, 
+then we must look for a function/method or a callable term (that has the `apply` method).
+
+### Looking up a name
+
+TODO
+
+#### Method Body
+
+Inside a method body, the directly enclosing scope is a BlockExpr.
+The precise look-up order is defined
+
+BlockExpr →* Method → **DIRECTLY ENCLOSING CLASS** → 
 
 
