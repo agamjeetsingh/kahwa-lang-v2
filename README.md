@@ -46,13 +46,27 @@ See [`spec/grammar.md`](spec/grammar.md) and [`spec/types.md`](spec/types.md) fo
 
 ### Parsel — A Custom Parser Combinator Library
 
-Rather than reaching for an off-the-shelf library like fastparse or cats-parse, I wrote **Parsel**: a parser combinator library built on top of a custom tokeniser. It supports:
+Rather than reaching for an off-the-shelf library like [Parsley](https://github.com/j-mie6/parsley), I wrote **Parsel**: a parser combinator library built on top of a custom tokeniser.
+
+The motivation was **error recovery**. How a parser recovers from a syntax error is an opinionated problem with several defensible answers — panic-mode resynchronisation, phrase-level repair, explicit error productions — so general-purpose combinator libraries tend to leave it out rather than impose one. I wanted to take my own approach to it, and to learn by building the library rather than consuming one.
+
+Parsel supports:
 
 - Composition via `~`, `<~`, `~>`, `map`, and `flatMap`
 - `or` with discriminator-based dispatch for efficient, non-backtracking alternation
 - `sepBy`, `list`, `optional`, and `delay` for common patterns
 - A `precedence` combinator implementing Pratt-style precedence climbing, with support for prefix, postfix, left-associative, right-associative, and non-associative operators
-- **Error recovery** via `sync` and `commit` — the parser can resynchronise after a syntax error and continue parsing the rest of the file
+
+#### Error Recovery
+
+Every parser returns `(Option[A], Input, Iterable[Error])` — failure is a value, not an exception, so one bad construct never unwinds the whole parse.
+
+- `sync` advances the input to the next **safe point**: a token where parsing can plausibly restart.
+- The safe-point predicate is a **contextual parameter** (`using SafePointFunction[Token]`), so recovery granularity is determined lexically by where you are in the grammar, without threading it through every combinator. At file level the parser resynchronises to `class` / `typedef` / a modifier; inside a block, `parseBlock` locally overrides the given so a broken statement resynchronises to the next `;` or `}` instead of skipping the rest of the class.
+- `commit` marks a point of no return — past it, a failure resynchronises rather than backtracking, which keeps a malformed construct from being silently misreported as a different one. (`parseTypedefDecl` commits once the `typedef` keyword is consumed.)
+- `fully` guarantees forward progress — if `sync` fails to advance past a position already tried, it force-skips one token — so a malformed file can never hang the parser, and it always returns a partial AST alongside the accumulated errors.
+
+The result: a file containing several syntax errors yields *all* of them plus a usable AST, instead of stopping at the first.
 
 ### Multi-Phase Semantic Analysis with Error Recovery
 
