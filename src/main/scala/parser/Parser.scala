@@ -495,7 +495,7 @@ object Parser {
     spanned(
       fully(
         or(
-          parseTypedef,
+          parseTypedefDecl,
           parseClassDecl,
           parseObjectDecl,
           parseFunctionDecl,

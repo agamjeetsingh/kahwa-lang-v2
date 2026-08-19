@@ -78,7 +78,7 @@ object SemanticAnalyser {
 
     // Phase 7:
 
-    TypeCheck(semanticContext).visitKahwaFile(kahwaFile)
+//    TypeCheck(semanticContext).visitKahwaFile(kahwaFile)
 
     (translationUnit, semanticContext.diagnostics.toList)
   }
